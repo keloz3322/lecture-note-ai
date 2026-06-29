@@ -32,6 +32,14 @@ export function buildMarkdown(result: RefineResult, fileName: string): string {
   lines.push("")
   lines.push(result.summary)
   lines.push("")
+  if (result.timeline.length > 0) {
+    lines.push("## 타임라인")
+    lines.push("")
+    for (const item of result.timeline) {
+      lines.push(`- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
+    }
+    lines.push("")
+  }
   lines.push("## 핵심 포인트")
   lines.push("")
   for (const p of result.keyPoints) lines.push(`- ${p}`)
@@ -60,6 +68,13 @@ export function buildPlainText(result: RefineResult, fileName: string): string {
   lines.push("[ 요약 ]")
   lines.push(result.summary)
   lines.push("")
+  if (result.timeline.length > 0) {
+    lines.push("[ 타임라인 ]")
+    result.timeline.forEach((item) => {
+      lines.push(`- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
+    })
+    lines.push("")
+  }
   lines.push("[ 핵심 포인트 ]")
   result.keyPoints.forEach((p) => lines.push(`- ${p}`))
   lines.push("")

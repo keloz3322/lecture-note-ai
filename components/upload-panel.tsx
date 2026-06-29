@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import { FileAudio, UploadCloud, X } from "lucide-react"
 import { formatBytes, formatDuration, getExtension } from "@/lib/format"
-import { MAX_FILE_SIZE, SUPPORTED_EXTENSIONS, type AudioFileMeta } from "@/lib/types"
+import { ACTIVE_UPLOAD_MAX_FILE_SIZE, SUPPORTED_EXTENSIONS, type AudioFileMeta } from "@/lib/types"
 
 interface UploadPanelProps {
   file: File | null
@@ -25,8 +25,8 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
         onValidationError(`지원하지 않는 파일 형식입니다. (${SUPPORTED_EXTENSIONS.join(", ")})`)
         return
       }
-      if (selected.size > MAX_FILE_SIZE) {
-        onValidationError("파일 크기가 25MB를 초과했습니다.")
+      if (selected.size > ACTIVE_UPLOAD_MAX_FILE_SIZE) {
+        onValidationError(`파일 크기가 ${formatBytes(ACTIVE_UPLOAD_MAX_FILE_SIZE)}를 초과했습니다.`)
         return
       }
 
@@ -123,7 +123,7 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
       <p className="mt-3 text-sm font-medium text-foreground">오디오 파일 업로드</p>
       <p className="mt-1 text-xs text-muted-foreground">클릭하거나 파일을 끌어다 놓으세요</p>
       <p className="mt-3 text-xs text-muted-foreground">
-        {SUPPORTED_EXTENSIONS.join(", ")} · 최대 25MB
+        {SUPPORTED_EXTENSIONS.join(", ")} · 최대 {formatBytes(ACTIVE_UPLOAD_MAX_FILE_SIZE)}
       </p>
       <input
         ref={inputRef}

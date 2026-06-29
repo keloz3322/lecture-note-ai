@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
+import { upload } from "@vercel/blob/client"
 import type {
   AudioFileMeta,
   PipelineStep,
@@ -11,6 +12,7 @@ import type {
 } from "@/lib/types"
 
 const STEP_ORDER: PipelineStep[] = ["prepare", "upload", "transcribe", "refine", "done"]
+const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD === "true"
 
 export interface PipelineState {
   steps: Record<PipelineStep, StepStatus>
@@ -29,6 +31,16 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? "요청에 실패했습니다.")
+  return data as T
+}
+
+async function postForm<T>(url: string, body: FormData): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    body,
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error ?? "요청에 실패했습니다.")
@@ -80,16 +92,27 @@ export function usePipeline() {
 
       // 2. Upload / validate
       setStep("upload", "active")
-      let uploaded: UploadResult
-      try {
-        const form = new FormData()
-        form.append("file", file)
-        const res = await fetch("/api/upload", { method: "POST", body: form })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((data as { error?: string }).error ?? "업로드에 실패했습니다.")
-        uploaded = data as UploadResult
-      } catch (e) {
-        return fail("upload", toMessage(e, "업로드 또는 네트워크 오류가 발생했습니다."))
+      let uploaded: UploadResult | null = null
+      let useDirectFile = !ENABLE_BLOB_UPLOAD
+
+      if (ENABLE_BLOB_UPLOAD) {
+        try {
+          const blob = await upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            contentType: file.type || undefined,
+            multipart: false,
+            clientPayload: JSON.stringify({ fileName: file.name, size: file.size, type: file.type }),
+          })
+          uploaded = {
+            audioUrl: blob.url,
+            fileName: file.name,
+            pathname: blob.pathname,
+            size: file.size,
+          }
+        } catch {
+          useDirectFile = true
+        }
       }
       if (abortRef.current) return
       setStep("upload", "complete")
@@ -98,10 +121,16 @@ export function usePipeline() {
       setStep("transcribe", "active")
       let transcribed: TranscribeResult
       try {
-        transcribed = await postJson<TranscribeResult>("/api/transcribe", {
-          audioUrl: uploaded.audioUrl,
-          fileName: uploaded.fileName,
-        })
+        if (useDirectFile || !uploaded) {
+          const form = new FormData()
+          form.append("file", file)
+          transcribed = await postForm<TranscribeResult>("/api/transcribe", form)
+        } else {
+          transcribed = await postJson<TranscribeResult>("/api/transcribe", {
+            audioUrl: uploaded.audioUrl,
+            fileName: uploaded.fileName,
+          })
+        }
       } catch (e) {
         return fail("transcribe", toMessage(e, "전사에 실패했습니다."))
       }
@@ -114,6 +143,9 @@ export function usePipeline() {
       try {
         refined = await postJson<RefineResult>("/api/refine", {
           rawTranscript: transcribed.rawTranscript,
+          segments: transcribed.segments,
+          words: transcribed.words,
+          durationSeconds: transcribed.durationSeconds,
         })
       } catch (e) {
         return fail("refine", toMessage(e, "교정/요약에 실패했습니다."))

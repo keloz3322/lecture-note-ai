@@ -6,6 +6,9 @@ export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number]
 
 // 25MB MVP limit
 export const MAX_FILE_SIZE = 25 * 1024 * 1024
+export const DIRECT_UPLOAD_MAX_FILE_SIZE = Math.floor(4.2 * 1024 * 1024)
+export const ACTIVE_UPLOAD_MAX_FILE_SIZE =
+  process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD === "true" ? MAX_FILE_SIZE : DIRECT_UPLOAD_MAX_FILE_SIZE
 
 export const SUPPORTED_MIME_TYPES = [
   "audio/mpeg",
@@ -18,6 +21,8 @@ export const SUPPORTED_MIME_TYPES = [
   "audio/wave",
   "audio/webm",
   "audio/ogg",
+  "audio/opus",
+  "application/ogg",
   "video/webm",
 ] as const
 
@@ -41,9 +46,10 @@ export type StepStatus = "pending" | "active" | "complete" | "error"
 
 /** Response shape from /api/upload */
 export interface UploadResult {
-  // Later this will be a Vercel Blob URL or temporary storage reference.
   audioUrl: string
   fileName: string
+  pathname?: string
+  size?: number
 }
 
 /** Response shape from /api/transcribe (Groq Whisper) */
@@ -51,18 +57,41 @@ export interface TranscribeResult {
   rawTranscript: string
   language?: string
   durationSeconds?: number
+  segments?: TranscriptSegment[]
+  words?: TranscriptWord[]
+}
+
+export interface TranscriptSegment {
+  id?: number
+  start: number
+  end: number
+  text: string
+}
+
+export interface TranscriptWord {
+  word: string
+  start: number
+  end: number
 }
 
 /** Response shape from /api/refine (Gemini) */
 export interface RefineResult {
   cleanedTranscript: string
   summary: string
+  timeline: TimelineItem[]
   keyPoints: string[]
   studyQuestions: string[]
   actionItems: string[]
 }
 
-export type TabKey = "transcript" | "summary" | "keyPoints" | "questions" | "actions"
+export interface TimelineItem {
+  start: number
+  end: number
+  title: string
+  summary: string
+}
+
+export type TabKey = "timeline" | "transcript" | "summary" | "keyPoints" | "questions" | "actions"
 
 export interface ApiError {
   error: string

@@ -1,8 +1,8 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CheckSquare, Download, FileText, HelpCircle, ListChecks, ScrollText } from "lucide-react"
-import { buildMarkdown, buildPlainText, downloadTextFile } from "@/lib/format"
+import { CheckSquare, Clock3, Download, FileText, HelpCircle, ListChecks, ScrollText } from "lucide-react"
+import { buildMarkdown, buildPlainText, downloadTextFile, formatDuration } from "@/lib/format"
 import type { RefineResult, TabKey } from "@/lib/types"
 import { CopyButton } from "./copy-button"
 
@@ -12,6 +12,7 @@ interface ResultsPanelProps {
 }
 
 const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
+  { key: "timeline", label: "타임라인", icon: Clock3 },
   { key: "transcript", label: "정리된 전사문", icon: ScrollText },
   { key: "summary", label: "요약", icon: FileText },
   { key: "keyPoints", label: "핵심 포인트", icon: ListChecks },
@@ -20,7 +21,7 @@ const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
 ]
 
 export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
-  const [tab, setTab] = useState<TabKey>("summary")
+  const [tab, setTab] = useState<TabKey>("timeline")
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
 
   const tabText = useMemo(() => getTabText(result, tab), [result, tab])
@@ -81,6 +82,26 @@ export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
 }
 
 function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
+  if (tab === "timeline") {
+    if (result.timeline.length === 0) {
+      return <p className="text-sm text-muted-foreground">타임라인 결과가 없습니다.</p>
+    }
+    return (
+      <ol className="space-y-3">
+        {result.timeline.map((item, i) => (
+          <li key={`${item.start}-${item.end}-${i}`} className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-sm bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground">
+                {formatDuration(item.start)}-{formatDuration(item.end)}
+              </span>
+              <h3 className="text-sm font-semibold text-card-foreground">{item.title}</h3>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+          </li>
+        ))}
+      </ol>
+    )
+  }
   if (tab === "transcript") {
     return (
       <div className="space-y-3 text-sm leading-relaxed text-card-foreground">
@@ -133,6 +154,10 @@ function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
 
 function getTabText(result: RefineResult, tab: TabKey): string {
   switch (tab) {
+    case "timeline":
+      return result.timeline
+        .map((item) => `- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
+        .join("\n")
     case "transcript":
       return result.cleanedTranscript
     case "summary":
