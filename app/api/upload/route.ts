@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { MAX_FILE_SIZE, getExtension, SUPPORTED_EXTENSIONS, type UploadResult } from "@/lib/types"
+import { MAX_FILE_SIZE, SUPPORTED_EXTENSIONS, type UploadResult } from "@/lib/types"
+import { getExtension } from "@/lib/format"
 
 // Placeholder upload route.
 //
