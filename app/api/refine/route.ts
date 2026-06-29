@@ -4,7 +4,7 @@ import type { RefineResult, TimelineItem, TranscriptSegment, TranscriptWord } fr
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-const GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
@@ -13,22 +13,22 @@ const refineSchema = {
   properties: {
     cleanedTranscript: {
       type: "string",
-      description: "강의 전사문을 자연스럽게 정리한 전체 텍스트입니다.",
+      description: "The cleaned full transcript in Korean.",
     },
     summary: {
       type: "string",
-      description: "핵심 흐름을 4~7문장으로 압축한 한국어 요약입니다.",
+      description: "A concise Korean summary in 4 to 7 sentences.",
     },
     timeline: {
       type: "array",
-      description: "강의 흐름을 시간 순서대로 묶은 구간별 노트입니다.",
+      description: "Chronological lecture sections based on the provided timestamps.",
       items: {
         type: "object",
         properties: {
-          start: { type: "number", description: "구간 시작 시각(초)" },
-          end: { type: "number", description: "구간 종료 시각(초)" },
-          title: { type: "string", description: "구간 제목" },
-          summary: { type: "string", description: "이 구간에서 다룬 핵심 내용" },
+          start: { type: "number", description: "Section start time in seconds." },
+          end: { type: "number", description: "Section end time in seconds." },
+          title: { type: "string", description: "Short section title." },
+          summary: { type: "string", description: "Section summary." },
         },
         required: ["start", "end", "title", "summary"],
         additionalProperties: false,
@@ -36,23 +36,25 @@ const refineSchema = {
     },
     keyPoints: {
       type: "array",
-      description: "학습자가 기억해야 할 핵심 포인트입니다.",
+      description: "Important study points.",
       items: { type: "string" },
     },
     studyQuestions: {
       type: "array",
-      description: "복습용 질문입니다.",
+      description: "Review questions.",
       items: { type: "string" },
     },
     actionItems: {
       type: "array",
-      description: "실행하거나 확인하면 좋은 항목입니다.",
+      description: "Follow-up action items.",
       items: { type: "string" },
     },
   },
   required: ["cleanedTranscript", "summary", "timeline", "keyPoints", "studyQuestions", "actionItems"],
   additionalProperties: false,
 } as const
+
+const geminiResponseSchema = stripUnsupportedSchemaFields(refineSchema)
 
 export async function POST(request: Request) {
   try {
@@ -72,15 +74,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Gemini API 키가 서버에 설정되어 있지 않습니다." }, { status: 500 })
     }
 
-    const result = await refineWithGemini(apiKey, {
+    const input = {
       rawTranscript: body.rawTranscript,
       segments: normalizeIncomingSegments(body.segments),
       words: normalizeIncomingWords(body.words),
       durationSeconds: typeof body.durationSeconds === "number" ? body.durationSeconds : undefined,
-    })
+    }
+    const result = await refineWithGemini(apiKey, input)
+
     return NextResponse.json(result)
   } catch (error) {
-    const message = error instanceof Error ? error.message : "교정/요약에 실패했습니다. 잠시 후 다시 시도해 주세요."
+    const message =
+      error instanceof Error
+        ? error.message
+        : "교정/요약에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
@@ -98,19 +105,23 @@ async function refineWithGemini(
   let lastError: Error | null = null
 
   for (const model of getGeminiModels()) {
-    const response = await fetch(GEMINI_INTERACTIONS_URL, {
+    const response = await fetch(`${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
-        model,
-        input: prompt,
-        response_format: {
-          type: "text",
-          mime_type: "application/json",
-          schema: refineSchema,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+          responseSchema: geminiResponseSchema,
         },
       }),
     })
@@ -122,9 +133,14 @@ async function refineWithGemini(
       throw lastError
     }
 
-    const outputText = extractGeminiOutputText(text)
-    const parsed = parseJsonObject(outputText)
-    return normalizeRefineResult(parsed)
+    try {
+      const outputText = extractGeminiOutputText(text)
+      const parsed = parseJsonObject(outputText)
+      return normalizeRefineResult(parsed, input)
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Gemini가 JSON 형식 결과를 반환하지 못했습니다.")
+      continue
+    }
   }
 
   throw lastError ?? new Error("Gemini 교정/요약에 실패했습니다.")
@@ -157,19 +173,22 @@ function buildPrompt({
   const timedTranscript = buildTimedTranscript(segments, rawTranscript)
   const wordTimestamps = buildWordTimestamps(words)
   const wordSection = wordTimestamps
-    ? `\n\n단어 단위 타임스탬프(세부 시각 확인용):\n${wordTimestamps}`
+    ? `\n\n단어 단위 타임스탬프(필요할 때만 참고):\n${wordTimestamps}`
     : ""
   const durationHint = durationSeconds ? `\n전체 길이: ${formatTimestamp(durationSeconds)}` : ""
 
-  return `다음은 강의/발표 녹음에서 자동 전사된 원문입니다.
+  return `다음은 강의/발표 녹음에서 자동 전사한 원문입니다.
 
-목표:
-- 원문의 의미를 보존하면서 오탈자, 말더듬, 반복 표현을 자연스럽게 정리하세요.
-- 전사문에 없는 사실을 새로 만들지 마세요.
-- 한국어로 답하세요. 외래어, 제품명, 코드/명령어는 원문 표기를 최대한 유지하세요.
-- 타임스탬프가 있는 구간 전사문을 보고 timeline을 반드시 시간 순서대로 작성하세요.
-- timeline은 4~8개 구간으로 묶고, start/end는 제공된 세그먼트 시각을 근거로 초 단위 숫자로 유지하세요.
-- 단어 단위 타임스탬프는 세그먼트 경계가 애매하거나 특정 용어의 위치를 확인할 때만 참고하세요.
+반드시 한국어로 답하세요.
+반드시 JSON 객체 하나만 반환하세요. 설명문, 마크다운 코드펜스, 주석은 쓰지 마세요.
+JSON 키는 cleanedTranscript, summary, timeline, keyPoints, studyQuestions, actionItems만 사용하세요.
+
+작성 규칙:
+- 원문의 의미를 보존하면서 말더듬, 반복 표현, 불필요한 추임새를 자연스럽게 정리하세요.
+- 전사문에 없는 사실은 새로 만들지 마세요.
+- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
+- timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
+- 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.
 - summary는 4~7문장, keyPoints는 5~9개, studyQuestions는 4~7개, actionItems는 3~6개로 작성하세요.${durationHint}
 
 타임스탬프 포함 전사:
@@ -185,6 +204,8 @@ function extractGeminiOutputText(responseText: string) {
   }
 
   const record = asRecord(data)
+  if (record.cleanedTranscript || record.summary || record.timeline) return responseText
+
   const outputText = getText(record.output_text)
   if (outputText) return outputText
 
@@ -227,19 +248,74 @@ function parseJsonObject(text: string) {
   try {
     return JSON.parse(trimmed)
   } catch {
+    const extracted = extractBalancedJsonObject(trimmed)
+    if (extracted) {
+      try {
+        return JSON.parse(extracted)
+      } catch {
+        // Fall through to the user-facing error below.
+      }
+    }
     throw new Error("Gemini가 JSON 형식 결과를 반환하지 못했습니다.")
   }
 }
 
-function normalizeRefineResult(value: unknown): RefineResult {
-  const record = asRecord(value)
+function extractBalancedJsonObject(text: string) {
+  const start = text.indexOf("{")
+  if (start === -1) return ""
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i]
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (char === "\\") {
+      escaped = true
+      continue
+    }
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+
+    if (char === "{") depth += 1
+    if (char === "}") {
+      depth -= 1
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+
+  return ""
+}
+
+function normalizeRefineResult(
+  value: unknown,
+  input: {
+    rawTranscript: string
+    segments?: TranscriptSegment[]
+  },
+): RefineResult {
+  const outer = asRecord(value)
+  const record = asRecord(outer.result || outer.data || value)
+  const timeline = normalizeTimeline(record.timeline)
+
   return {
-    cleanedTranscript: getText(record.cleanedTranscript) || "정리된 전사문을 생성하지 못했습니다.",
+    cleanedTranscript:
+      getText(record.cleanedTranscript) ||
+      getText(record.cleaned_transcript) ||
+      input.rawTranscript,
     summary: getText(record.summary) || "요약을 생성하지 못했습니다.",
-    timeline: normalizeTimeline(record.timeline),
-    keyPoints: toStringArray(record.keyPoints),
-    studyQuestions: toStringArray(record.studyQuestions),
-    actionItems: toStringArray(record.actionItems),
+    timeline: timeline.length ? timeline : buildFallbackTimeline(input.segments),
+    keyPoints: toStringArray(record.keyPoints || record.key_points),
+    studyQuestions: toStringArray(record.studyQuestions || record.study_questions),
+    actionItems: toStringArray(record.actionItems || record.action_items),
   }
 }
 
@@ -256,6 +332,25 @@ function normalizeTimeline(value: unknown): TimelineItem[] {
       return { start, end, title, summary }
     })
     .filter((item): item is TimelineItem => item !== null)
+}
+
+function buildFallbackTimeline(segments: TranscriptSegment[] | undefined): TimelineItem[] {
+  if (!segments?.length) return []
+
+  const bucketCount = Math.min(6, Math.max(1, Math.ceil(segments.length / 16)))
+  const bucketSize = Math.ceil(segments.length / bucketCount)
+
+  return Array.from({ length: bucketCount }, (_, index) => {
+    const bucket = segments.slice(index * bucketSize, (index + 1) * bucketSize)
+    const first = bucket[0]
+    const last = bucket[bucket.length - 1]
+    return {
+      start: first?.start ?? 0,
+      end: last?.end ?? first?.end ?? 0,
+      title: `구간 ${index + 1}`,
+      summary: bucket.map((segment) => segment.text.trim()).join(" ").slice(0, 240),
+    }
+  }).filter((item) => item.summary.length > 0)
 }
 
 function toStringArray(value: unknown) {
@@ -330,11 +425,25 @@ function normalizeIncomingWords(value: unknown): TranscriptWord[] | undefined {
   return words.length ? words : undefined
 }
 
+function stripUnsupportedSchemaFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripUnsupportedSchemaFields)
+  if (typeof value !== "object" || value === null) return value
+
+  const output: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "additionalProperties") continue
+    output[key] = stripUnsupportedSchemaFields(child)
+  }
+  return output
+}
+
 function geminiErrorMessage(status: number, responseText: string, model: string) {
   try {
     const parsed = JSON.parse(responseText) as { error?: { message?: unknown }; message?: unknown }
     const detail = getText(parsed.error?.message) || getText(parsed.message)
-    return detail ? `Gemini 교정/요약 실패 (${model}, ${status}): ${detail}` : `Gemini 교정/요약 실패 (${model}, ${status})`
+    return detail
+      ? `Gemini 교정/요약 실패 (${model}, ${status}): ${detail}`
+      : `Gemini 교정/요약 실패 (${model}, ${status})`
   } catch {
     return `Gemini 교정/요약 실패 (${model}, ${status}): ${responseText.slice(0, 240)}`
   }
