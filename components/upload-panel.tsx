@@ -120,15 +120,16 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
       <div className="flex size-11 items-center justify-center rounded-full bg-secondary text-foreground">
         <UploadCloud className="size-5" />
       </div>
-      <p className="mt-3 text-sm font-medium text-foreground">오디오 파일 업로드</p>
+      <p className="mt-3 text-sm font-medium text-foreground">오디오 / 영상 파일 업로드</p>
       <p className="mt-1 text-xs text-muted-foreground">클릭하거나 파일을 끌어다 놓으세요</p>
       <p className="mt-3 text-xs text-muted-foreground">
         {SUPPORTED_EXTENSIONS.join(", ")} · 최대 {formatBytes(ACTIVE_UPLOAD_MAX_FILE_SIZE)}
       </p>
+      <p className="mt-1 text-xs text-muted-foreground">큰 파일이나 영상은 자동으로 음성만 압축해 처리합니다.</p>
       <input
         ref={inputRef}
         type="file"
-        accept=".mp3,.m4a,.wav,.webm,.ogg,audio/*"
+        accept=".mp3,.m4a,.wav,.webm,.ogg,.opus,.mp4,.mov,.mkv,.avi,.m4v,audio/*,video/*"
         className="sr-only"
         disabled={disabled}
         onChange={(e) => {

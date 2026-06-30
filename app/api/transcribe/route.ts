@@ -2,13 +2,18 @@ import { NextResponse } from "next/server"
 import { del, get } from "@vercel/blob"
 import {
   DIRECT_UPLOAD_MAX_FILE_SIZE,
+  GROQ_MAX_FILE_SIZE,
+  REENCODE_THRESHOLD,
   SUPPORTED_EXTENSIONS,
   SUPPORTED_MIME_TYPES,
   type TranscribeResult,
   type TranscriptSegment,
   type TranscriptWord,
 } from "@/lib/types"
-import { getExtension } from "@/lib/format"
+import { getExtension, formatBytes } from "@/lib/format"
+import { reencodeToOpus, shouldReencode } from "@/lib/transcode"
+
+class PayloadTooLargeError extends Error {}
 
 export const runtime = "nodejs"
 // Larger files need more time to download from Blob and transcribe via Groq.
@@ -33,7 +38,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "전사할 오디오 파일이 없습니다." }, { status: 400 })
       }
       validateDirectUpload(file)
-      const result = await transcribeFileWithGroq(apiKey, file)
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const prepared = await prepareForGroq(buffer, file.name, file.type)
+      const result = await transcribeFileWithGroq(apiKey, prepared)
       return NextResponse.json(result)
     }
 
@@ -50,12 +57,16 @@ export async function POST(request: Request) {
 
     const fileName = body.fileName ?? "lecture-audio.ogg"
     // The Blob store is private, so Groq cannot fetch the URL directly.
-    // Download the file server-side (Blob -> server, bypassing the request body limit)
-    // and hand it to Groq as a file upload.
-    const file = await downloadPrivateBlob(body.pathname, fileName)
-    const result = await transcribeFileWithGroq(apiKey, file)
+    // Download the file server-side (Blob -> server, bypassing the request body limit),
+    // compress it if needed, and hand it to Groq as a file upload.
+    const { buffer, contentType } = await downloadPrivateBlob(body.pathname)
+    const prepared = await prepareForGroq(buffer, fileName, contentType)
+    const result = await transcribeFileWithGroq(apiKey, prepared)
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof PayloadTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
     const message = error instanceof Error ? error.message : "전사에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return NextResponse.json({ error: message }, { status: 500 })
   } finally {
@@ -93,15 +104,41 @@ async function transcribeFileWithGroq(apiKey: string, file: File): Promise<Trans
   return normalizeGroqResult(fileResult.data)
 }
 
-async function downloadPrivateBlob(pathname: string, fileName: string): Promise<File> {
+async function downloadPrivateBlob(pathname: string): Promise<{ buffer: Buffer; contentType: string }> {
   const result = await get(pathname, { access: "private" })
   if (!result || !result.stream) {
     throw new Error("업로드된 오디오 파일을 찾을 수 없습니다.")
   }
 
   const arrayBuffer = await new Response(result.stream).arrayBuffer()
-  const contentType = result.blob.contentType || "audio/ogg"
-  return new File([arrayBuffer], fileName, { type: contentType })
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    contentType: result.blob.contentType || "audio/ogg",
+  }
+}
+
+/**
+ * Prepare the downloaded media for Groq. Files that are video or larger than the
+ * re-encode threshold are compressed to Opus (16kHz mono, 32kbps). If the result
+ * still exceeds Groq's free-tier limit, we stop and surface a clear message
+ * (chunking is intentionally not implemented yet).
+ */
+async function prepareForGroq(buffer: Buffer, fileName: string, contentType: string): Promise<File> {
+  if (!shouldReencode(fileName, contentType, buffer.byteLength, REENCODE_THRESHOLD)) {
+    return new File([buffer], fileName, { type: contentType || "audio/ogg" })
+  }
+
+  const opus = await reencodeToOpus(buffer, fileName)
+
+  if (opus.byteLength > GROQ_MAX_FILE_SIZE) {
+    throw new PayloadTooLargeError(
+      `압축 후에도 파일 크기가 ${formatBytes(opus.byteLength)}로 Groq 무료 한도(${formatBytes(GROQ_MAX_FILE_SIZE)})를 초과합니다. ` +
+        `더 짧은 길이로 나눠서 업로드해 주세요. (긴 파일 자동 분할은 추후 지원 예정입니다.)`,
+    )
+  }
+
+  const baseName = fileName.replace(/\.[^./\\]+$/, "")
+  return new File([opus], `${baseName}.opus`, { type: "audio/ogg" })
 }
 
 function appendTimestampOptions(form: FormData) {

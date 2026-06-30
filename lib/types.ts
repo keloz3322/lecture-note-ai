@@ -1,8 +1,25 @@
 // Shared types for the Lecture Note AI pipeline.
 // Kept in one place so connecting Groq / Gemini / Vercel Blob later is straightforward.
 
-export const SUPPORTED_EXTENSIONS = ["mp3", "m4a", "wav", "webm", "ogg"] as const
+// Audio + video containers. Video is accepted because the server extracts/compresses
+// the audio track with ffmpeg before sending it to Groq.
+export const SUPPORTED_EXTENSIONS = [
+  "mp3",
+  "m4a",
+  "wav",
+  "webm",
+  "ogg",
+  "opus",
+  "mp4",
+  "mov",
+  "mkv",
+  "avi",
+  "m4v",
+] as const
 export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number]
+
+// Extensions that are unambiguously video containers (used to decide re-encoding).
+export const VIDEO_EXTENSIONS = ["mp4", "mov", "mkv", "avi", "m4v"] as const
 
 // Max size for the Blob-based upload path (client uploads straight to Vercel Blob,
 // so this is bounded by Groq Whisper's own file limit rather than the serverless body limit).
@@ -12,6 +29,11 @@ export const MAX_FILE_SIZE = 100 * 1024 * 1024
 export const DIRECT_UPLOAD_MAX_FILE_SIZE = Math.floor(4.2 * 1024 * 1024)
 export const ACTIVE_UPLOAD_MAX_FILE_SIZE =
   process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false" ? MAX_FILE_SIZE : DIRECT_UPLOAD_MAX_FILE_SIZE
+
+// Groq's free tier rejects transcription files larger than 25MB.
+export const GROQ_MAX_FILE_SIZE = 25 * 1024 * 1024
+// Above this, the server re-encodes to compact Opus (16kHz mono, 32kbps) before sending.
+export const REENCODE_THRESHOLD = 24 * 1024 * 1024
 
 export const SUPPORTED_MIME_TYPES = [
   "audio/mpeg",
@@ -27,6 +49,12 @@ export const SUPPORTED_MIME_TYPES = [
   "audio/opus",
   "application/ogg",
   "video/webm",
+  "video/mp4",
+  "video/quicktime",
+  "video/x-matroska",
+  "video/x-msvideo",
+  "video/mpeg",
+  "video/x-m4v",
 ] as const
 
 export interface AudioFileMeta {
