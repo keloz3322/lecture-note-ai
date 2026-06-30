@@ -33,10 +33,8 @@ export const DIRECT_UPLOAD_MAX_FILE_SIZE = Math.floor(4.2 * 1024 * 1024)
 export const ACTIVE_UPLOAD_MAX_FILE_SIZE =
   process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false" ? MAX_FILE_SIZE : DIRECT_UPLOAD_MAX_FILE_SIZE
 
-// Groq's free tier rejects transcription files larger than 25MB.
-export const GROQ_MAX_FILE_SIZE = 25 * 1024 * 1024
-// Above this, the server re-encodes to compact Opus (16kHz mono, 32kbps) before sending.
-export const REENCODE_THRESHOLD = 24 * 1024 * 1024
+// Per-engine file-size limits and re-encode thresholds now live in lib/engines.ts
+// (each engine's maxFileSize and reencodeThresholdFor); there is no single global value.
 
 export const SUPPORTED_MIME_TYPES = [
   "audio/mpeg",
