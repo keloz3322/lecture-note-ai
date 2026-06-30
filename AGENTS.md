@@ -11,8 +11,9 @@
 - Next.js App Router project.
 - Main flow: browser upload -> `/api/transcribe` -> Groq Whisper -> `/api/refine` -> Gemini -> rendered notes.
 - Product direction: general-purpose audio/video transcript cleanup and note generation, not lecture-only.
-- Audio is not persisted in the current MVP. `NEXT_PUBLIC_ENABLE_BLOB_UPLOAD=false` keeps the direct upload path active.
-- Current demo file target is an Ogg Opus mono 16 kHz file below the direct upload limit.
+- Audio is temporarily uploaded to private Vercel Blob, downloaded server-side for transcription, then deleted after processing.
+- `NEXT_PUBLIC_ENABLE_BLOB_UPLOAD=true` keeps the Blob upload path active and avoids the legacy ~4.2MB direct request-body limit.
+- The current app-level upload cap is 100MB; each transcription engine still enforces its own compressed/chunked payload limits.
 
 ## Secrets
 - Do not commit or print API keys.
