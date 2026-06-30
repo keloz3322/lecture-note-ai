@@ -123,9 +123,11 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
       <p className="mt-3 text-sm font-medium text-foreground">오디오 / 영상 파일 업로드</p>
       <p className="mt-1 text-xs text-muted-foreground">클릭하거나 파일을 끌어다 놓으세요</p>
       <p className="mt-3 text-xs text-muted-foreground">
-        {SUPPORTED_EXTENSIONS.join(", ")} · 최대 {formatBytes(ACTIVE_UPLOAD_MAX_FILE_SIZE)}
+        {SUPPORTED_EXTENSIONS.join(", ")} · 업로드 최대 {formatBytes(ACTIVE_UPLOAD_MAX_FILE_SIZE)}
       </p>
-      <p className="mt-1 text-xs text-muted-foreground">큰 파일이나 영상은 자동으로 음성만 압축해 처리합니다.</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        큰 파일·영상은 음성만 자동 압축합니다. 모델별 크기·길이 한도는 엔진 설정을 참고하세요.
+      </p>
       <input
         ref={inputRef}
         type="file"

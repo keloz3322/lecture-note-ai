@@ -1,7 +1,7 @@
 "use client"
 
 import { Mic, Wand2 } from "lucide-react"
-import { REFINE_ENGINES, TRANSCRIPTION_ENGINES } from "@/lib/engines"
+import { REFINE_ENGINES, TRANSCRIPTION_ENGINES, transcriptionLimitText } from "@/lib/engines"
 
 interface EngineSelectorProps {
   transcriptionEngine: string
@@ -32,6 +32,7 @@ export function EngineSelector({
         onChange={onTranscriptionChange}
         options={TRANSCRIPTION_ENGINES}
         hint={transcription?.description}
+        meta={transcription ? transcriptionLimitText(transcription) : undefined}
       />
       <Field
         id="refine-engine"
@@ -56,9 +57,10 @@ interface FieldProps {
   onChange: (id: string) => void
   options: { id: string; label: string }[]
   hint?: string
+  meta?: string
 }
 
-function Field({ id, icon, label, value, disabled, onChange, options, hint }: FieldProps) {
+function Field({ id, icon, label, value, disabled, onChange, options, hint, meta }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-medium text-foreground">
@@ -79,6 +81,11 @@ function Field({ id, icon, label, value, disabled, onChange, options, hint }: Fi
         ))}
       </select>
       {hint && <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+      {meta && (
+        <p className="inline-flex w-fit rounded border border-border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {meta}
+        </p>
+      )}
     </div>
   )
 }

@@ -23,8 +23,9 @@ export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number]
 // Extensions that are unambiguously video containers (used to decide re-encoding).
 export const VIDEO_EXTENSIONS = ["mp4", "mov", "mkv", "avi", "m4v"] as const
 
-// Max size for the Blob-based upload path (client uploads straight to Vercel Blob,
-// so this is bounded by Groq Whisper's own file limit rather than the serverless body limit).
+// App-level cap for the Blob-based upload path (client uploads straight to Vercel
+// Blob, bypassing the serverless body limit). This is our own chosen ceiling, not
+// a Blob limit; the server then compresses and enforces each engine's real limits.
 export const MAX_FILE_SIZE = 100 * 1024 * 1024
 // Used only when Blob upload is disabled and the file goes through the serverless
 // request body, which Vercel caps at ~4.5MB.

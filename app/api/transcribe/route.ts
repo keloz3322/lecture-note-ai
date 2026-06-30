@@ -11,10 +11,11 @@ import {
   type TranscriptWord,
 } from "@/lib/types"
 import { getExtension, formatBytes } from "@/lib/format"
-import { reencodeToOpus, shouldReencode } from "@/lib/transcode"
-import { getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
+import { reencodeToOpus, shouldReencode, probeDurationSeconds } from "@/lib/transcode"
+import { checkDurationLimit, getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
 
 class PayloadTooLargeError extends Error {}
+class MediaTooLongError extends Error {}
 
 export const runtime = "nodejs"
 // Larger files need more time to download from Blob and transcribe.
@@ -67,6 +68,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof PayloadTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    if (error instanceof MediaTooLongError) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
     }
     const message = error instanceof Error ? error.message : "전사에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return NextResponse.json({ error: message }, { status: 500 })
@@ -205,6 +209,14 @@ async function prepareForTranscription(
   contentType: string,
   engine: TranscriptionEngine,
 ): Promise<PreparedAudio> {
+  // Enforce the model's hard length limit (e.g. gpt-4o transcribe: 25 min).
+  // Length is unchanged by re-encoding, so we probe the original input.
+  if (engine.maxDurationSeconds) {
+    const duration = await probeDurationSeconds(buffer, fileName)
+    const lengthError = checkDurationLimit(engine, duration ?? undefined)
+    if (lengthError) throw new MediaTooLongError(lengthError)
+  }
+
   const threshold = reencodeThresholdFor(engine)
 
   if (!shouldReencode(fileName, contentType, buffer.byteLength, threshold)) {
