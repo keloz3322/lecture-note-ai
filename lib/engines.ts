@@ -80,10 +80,10 @@ export const TRANSCRIPTION_ENGINES: TranscriptionEngine[] = [
 export const REFINE_ENGINES: RefineEngine[] = [
   {
     id: "gateway-gemini",
-    label: "AI Gateway · Gemini 2.5 Flash",
-    description: "Google Gemini 2.5 Flash (빠르고 균형 잡힌 기본값)",
+    label: "AI Gateway · Gemini 3.5 Flash",
+    description: "Google Gemini 3.5 Flash (고품질 요약 기본값)",
     via: "gateway",
-    modelId: "google/gemini-2.5-flash",
+    modelId: "google/gemini-3.5-flash",
   },
   {
     id: "gateway-gpt",
