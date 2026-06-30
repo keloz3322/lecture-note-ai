@@ -12,10 +12,10 @@ import {
 } from "@/lib/types"
 import { getExtension, formatBytes } from "@/lib/format"
 import { reencodeToOpus, shouldReencode, probeDurationSeconds } from "@/lib/transcode"
-import { checkDurationLimit, getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
+import { createInputFile, computeVadScores, planChunks, extractChunkOpus } from "@/lib/vad-chunk"
+import { getChunkPlan, getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
 
 class PayloadTooLargeError extends Error {}
-class MediaTooLongError extends Error {}
 
 export const runtime = "nodejs"
 // Download from Blob + ffmpeg transcode + transcription is the heaviest path.
@@ -72,9 +72,6 @@ export async function POST(request: Request) {
     if (error instanceof PayloadTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 })
     }
-    if (error instanceof MediaTooLongError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
-    }
     const message = error instanceof Error ? error.message : "전사에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return NextResponse.json({ error: message }, { status: 500 })
   } finally {
@@ -97,22 +94,109 @@ function validateDirectUpload(file: File) {
   }
 }
 
-/** Prepare the media and route it to the selected transcription engine. */
+/**
+ * Decide between single-shot and chunked transcription, then route to the engine.
+ * Files that fit under the engine's per-chunk ceiling (model length limit and/or
+ * file-size limit) are transcribed in one request; longer files are split at silence
+ * valleys via VAD and merged back with offset-corrected timestamps.
+ */
 async function transcribeBuffer(
   buffer: Buffer,
   fileName: string,
   contentType: string,
   engine: TranscriptionEngine,
 ): Promise<TranscribeResult> {
-  const prepared = await prepareForTranscription(buffer, fileName, contentType, engine)
+  const plan = getChunkPlan(engine)
+  const duration = await probeDurationSeconds(buffer, fileName)
 
+  if (duration == null || duration <= plan.maxSeconds) {
+    const prepared = await prepareForTranscription(buffer, fileName, contentType, engine)
+    return transcribeOne(prepared, engine)
+  }
+
+  return transcribeChunked(buffer, fileName, engine, duration, plan)
+}
+
+/** Transcribe a single prepared audio payload with the selected engine. */
+async function transcribeOne(prepared: PreparedAudio, engine: TranscriptionEngine): Promise<TranscribeResult> {
   if (engine.via === "groq") {
     const apiKey = process.env.GROQ_API_KEY
     if (!apiKey) throw new Error("Groq API 키가 서버에 설정되어 있지 않습니다.")
     return transcribeWithGroq(apiKey, prepared, engine)
   }
-
   return transcribeWithGateway(prepared, engine)
+}
+
+/**
+ * Split long media at VAD-detected silence valleys, transcribe each chunk, and
+ * merge the results. Each chunk's timestamps are shifted by the chunk's start
+ * offset so the final timeline is continuous.
+ */
+async function transcribeChunked(
+  buffer: Buffer,
+  fileName: string,
+  engine: TranscriptionEngine,
+  duration: number,
+  plan: ReturnType<typeof getChunkPlan>,
+): Promise<TranscribeResult> {
+  const { path, cleanup } = await createInputFile(buffer, fileName)
+  try {
+    const scores = await computeVadScores(path)
+    const chunks = planChunks(scores, duration, plan.targetSeconds, plan.maxSeconds)
+    if (chunks.length === 0) throw new Error("오디오 분할 지점을 계산하지 못했습니다.")
+
+    const parts: { result: TranscribeResult; offset: number }[] = []
+    // Sequential to respect provider rate limits and bound peak memory.
+    for (const chunk of chunks) {
+      const opus = await extractChunkOpus(path, chunk.startSec, chunk.endSec)
+      if (opus.byteLength > engine.maxFileSize) {
+        throw new PayloadTooLargeError(
+          `분할 후에도 청크 크기가 ${formatBytes(opus.byteLength)}로 ${engine.label} 한도(${formatBytes(engine.maxFileSize)})를 초과합니다.`,
+        )
+      }
+      const prepared: PreparedAudio = {
+        bytes: opus,
+        fileName: `chunk-${chunk.index}.opus`,
+        mediaType: "audio/ogg",
+      }
+      const result = await transcribeOne(prepared, engine)
+      parts.push({ result, offset: chunk.startSec })
+    }
+
+    return mergeTranscripts(parts, duration)
+  } finally {
+    await cleanup()
+  }
+}
+
+/** Concatenate chunk transcripts and shift their timestamps by each chunk's offset. */
+function mergeTranscripts(parts: { result: TranscribeResult; offset: number }[], totalDuration: number): TranscribeResult {
+  const rawTranscript = parts
+    .map((p) => p.result.rawTranscript.trim())
+    .filter(Boolean)
+    .join("\n")
+
+  const segments: TranscriptSegment[] = []
+  const words: TranscriptWord[] = []
+  let language: string | undefined
+
+  for (const { result, offset } of parts) {
+    if (!language && result.language) language = result.language
+    for (const seg of result.segments ?? []) {
+      segments.push({ start: seg.start + offset, end: seg.end + offset, text: seg.text })
+    }
+    for (const word of result.words ?? []) {
+      words.push({ word: word.word, start: word.start + offset, end: word.end + offset })
+    }
+  }
+
+  return {
+    rawTranscript,
+    language,
+    durationSeconds: totalDuration,
+    segments: segments.length > 0 ? segments : undefined,
+    words: words.length > 0 ? words : undefined,
+  }
 }
 
 interface PreparedAudio {
@@ -201,10 +285,10 @@ async function downloadPrivateBlob(pathname: string): Promise<{ buffer: Buffer; 
 }
 
 /**
- * Prepare the downloaded media for the selected engine. Files that are video or
- * larger than the engine's re-encode threshold are compressed to Opus (16kHz
- * mono, 32kbps). If the result still exceeds the engine's hard limit, we stop and
- * surface a clear message (chunking is intentionally not implemented yet).
+ * Prepare media for a single-shot request (used when the file already fits under
+ * the engine's per-chunk ceiling). Video or oversized audio is compressed to Opus
+ * (16kHz mono, 32kbps). Longer media is handled by the chunked path instead, so a
+ * size overflow here is unexpected and surfaced as a clear error.
  */
 async function prepareForTranscription(
   buffer: Buffer,
@@ -212,14 +296,6 @@ async function prepareForTranscription(
   contentType: string,
   engine: TranscriptionEngine,
 ): Promise<PreparedAudio> {
-  // Enforce the model's hard length limit (e.g. gpt-4o transcribe: 25 min).
-  // Length is unchanged by re-encoding, so we probe the original input.
-  if (engine.maxDurationSeconds) {
-    const duration = await probeDurationSeconds(buffer, fileName)
-    const lengthError = checkDurationLimit(engine, duration ?? undefined)
-    if (lengthError) throw new MediaTooLongError(lengthError)
-  }
-
   const threshold = reencodeThresholdFor(engine)
 
   if (!shouldReencode(fileName, contentType, buffer.byteLength, threshold)) {
@@ -230,8 +306,7 @@ async function prepareForTranscription(
 
   if (opus.byteLength > engine.maxFileSize) {
     throw new PayloadTooLargeError(
-      `압축 후에도 파일 크기가 ${formatBytes(opus.byteLength)}로 ${engine.label} 한도(${formatBytes(engine.maxFileSize)})를 초과합니다. ` +
-        `더 짧은 길이로 나눠서 업로드해 주세요. (긴 파일 자동 분할은 추후 지원 예정입니다.)`,
+      `압축 후에도 파일 크기가 ${formatBytes(opus.byteLength)}로 ${engine.label} 한도(${formatBytes(engine.maxFileSize)})를 초과합니다.`,
     )
   }
 

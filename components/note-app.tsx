@@ -4,7 +4,7 @@ import { useCallback, useState } from "react"
 import { AlertTriangle, AudioLines, Play, RotateCcw, Sparkles } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
 import type { AudioFileMeta } from "@/lib/types"
-import { checkDurationLimit, DEFAULT_REFINE_ENGINE, DEFAULT_TRANSCRIPTION_ENGINE, getTranscriptionEngine } from "@/lib/engines"
+import { DEFAULT_REFINE_ENGINE, DEFAULT_TRANSCRIPTION_ENGINE } from "@/lib/engines"
 import { EngineSelector } from "./engine-selector"
 import { ProgressSteps } from "./progress-steps"
 import { ResultsPanel } from "./results-panel"
@@ -33,13 +33,8 @@ export function NoteApp() {
 
   const start = useCallback(() => {
     if (!file || !meta) return
-    // Pre-check the model's length limit using the browser-read duration so the
-    // user gets immediate feedback instead of uploading a file that will be rejected.
-    const lengthError = checkDurationLimit(getTranscriptionEngine(transcriptionEngine), meta.durationSeconds)
-    if (lengthError) {
-      setValidationError(lengthError)
-      return
-    }
+    // Length limits are no longer a hard block: long files are split at silence
+    // valleys (VAD) and transcribed in chunks on the server.
     setValidationError(null)
     run(file, meta, { transcriptionEngine, refineEngine })
   }, [file, meta, run, transcriptionEngine, refineEngine])
