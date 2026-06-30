@@ -14,14 +14,16 @@ const STEP_LABELS: Record<PipelineStep, string> = {
 interface ProgressStepsProps {
   order: PipelineStep[]
   steps: Record<PipelineStep, StepStatus>
+  labels?: Partial<Record<PipelineStep, string>>
 }
 
-export function ProgressSteps({ order, steps }: ProgressStepsProps) {
+export function ProgressSteps({ order, steps, labels }: ProgressStepsProps) {
   return (
     <ol className="flex flex-col gap-1">
       {order.map((step, i) => {
         const status = steps[step]
         const isLast = i === order.length - 1
+        const label = labels?.[step] ?? STEP_LABELS[step]
         return (
           <li key={step} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -45,7 +47,7 @@ export function ProgressSteps({ order, steps }: ProgressStepsProps) {
                         : "text-muted-foreground"
                 }`}
               >
-                {STEP_LABELS[step]}
+                {label}
               </p>
               <p className="text-xs text-muted-foreground">{statusLabel(status)}</p>
             </div>

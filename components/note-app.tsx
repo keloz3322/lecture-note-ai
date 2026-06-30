@@ -1,11 +1,16 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { AlertTriangle, AudioLines, Play, RotateCcw, Sparkles } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
 import { DEMO_FILE_META, DEMO_FILE_NAME } from "@/lib/demo-result"
 import type { AudioFileMeta } from "@/lib/types"
-import { DEFAULT_REFINE_ENGINE, DEFAULT_TRANSCRIPTION_ENGINE } from "@/lib/engines"
+import {
+  DEFAULT_REFINE_ENGINE,
+  DEFAULT_TRANSCRIPTION_ENGINE,
+  getRefineEngine,
+  getTranscriptionEngine,
+} from "@/lib/engines"
 import { EngineSelector } from "./engine-selector"
 import { ProgressSteps } from "./progress-steps"
 import { ResultsPanel } from "./results-panel"
@@ -19,6 +24,14 @@ export function NoteApp() {
   const [transcriptionEngine, setTranscriptionEngine] = useState(DEFAULT_TRANSCRIPTION_ENGINE)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
   const [isDemo, setIsDemo] = useState(false)
+  const progressLabels = useMemo(() => {
+    const transcription = getTranscriptionEngine(transcriptionEngine)
+    const refine = getRefineEngine(refineEngine)
+    return {
+      transcribe: `${statusEngineName(transcription.label)}로 전사 중`,
+      refine: `${statusEngineName(refine.label)}로 교정 · 요약 중`,
+    }
+  }, [transcriptionEngine, refineEngine])
 
   const onSelect = useCallback((selected: File, m: AudioFileMeta) => {
     setValidationError(null)
@@ -172,7 +185,7 @@ export function NoteApp() {
           {hasStarted && (
             <section className="rounded-lg border border-border bg-card p-4">
               <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">진행 상태</h2>
-              <ProgressSteps order={stepOrder} steps={state.steps} />
+              <ProgressSteps order={stepOrder} steps={state.steps} labels={progressLabels} />
             </section>
           )}
 
@@ -197,6 +210,10 @@ export function NoteApp() {
       </main>
     </div>
   )
+}
+
+function statusEngineName(label: string) {
+  return label.replace(/^AI Gateway · /, "").replace(/^Groq · /, "Groq ")
 }
 
 function EmptyState({ running }: { running: boolean }) {
