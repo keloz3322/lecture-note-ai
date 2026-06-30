@@ -1,10 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CheckSquare, Clock3, Download, FileText, ListChecks, Quote, ScrollText, Sparkles } from "lucide-react"
 import { buildMarkdown, buildPlainText, downloadTextFile, formatDuration } from "@/lib/format"
 import type { RefineResult, RefineSection, TabKey } from "@/lib/types"
-import { CONTENT_TYPES, getContentType, type ContentTypeId } from "@/lib/content-types"
+import { CONTENT_TYPES, getContentType, getCoreLabel, type ContentTypeId } from "@/lib/content-types"
 import { CopyButton } from "./copy-button"
 
 interface ResultsPanelProps {
@@ -16,12 +16,15 @@ interface ResultsPanelProps {
   changingType?: boolean
 }
 
-const CORE_TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
-  { key: "timeline", label: "타임라인", icon: Clock3 },
-  { key: "transcript", label: "정리된 전사문", icon: ScrollText },
-  { key: "summary", label: "요약", icon: FileText },
-  { key: "keyPoints", label: "핵심 포인트", icon: ListChecks },
-]
+/** Core tabs, with labels that adapt to the content type. */
+function buildCoreTabs(contentType: ContentTypeId): { key: TabKey; label: string; icon: typeof FileText }[] {
+  return [
+    { key: "summary", label: "요약", icon: FileText },
+    { key: "timeline", label: getCoreLabel(contentType, "timeline"), icon: Clock3 },
+    { key: "keyPoints", label: getCoreLabel(contentType, "keyPoints"), icon: ListChecks },
+    { key: "transcript", label: "정리된 전사문", icon: ScrollText },
+  ]
+}
 
 function sectionIcon(kind: RefineSection["kind"]) {
   if (kind === "qa") return CheckSquare
@@ -33,8 +36,17 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
   const [tab, setTab] = useState<TabKey>("summary")
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
 
+  const coreTabs = useMemo(() => buildCoreTabs(result.contentType), [result.contentType])
+
   // Only show section tabs that actually have content.
   const sectionTabs = useMemo(() => result.sections.filter((s) => s.items.length > 0), [result.sections])
+
+  // When the content type changes, the active tab may point at a section that no
+  // longer exists. Fall back to the summary tab so the panel never goes blank.
+  useEffect(() => {
+    const validKeys = new Set<TabKey>([...coreTabs.map((t) => t.key), ...sectionTabs.map((s) => s.id)])
+    if (!validKeys.has(tab)) setTab("summary")
+  }, [coreTabs, sectionTabs, tab])
 
   const tabText = useMemo(() => getTabText(result, tab), [result, tab])
 
@@ -74,7 +86,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
-        {CORE_TABS.map(({ key, label, icon: Icon }) => (
+        {coreTabs.map(({ key, label, icon: Icon }) => (
           <TabButton key={key} active={tab === key} onClick={() => setTab(key)} icon={Icon} label={label} />
         ))}
         {sectionTabs.map((section) => (
