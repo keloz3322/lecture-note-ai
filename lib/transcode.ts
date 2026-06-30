@@ -2,9 +2,11 @@ import { spawn } from "node:child_process"
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import ffmpegPath from "ffmpeg-static"
 import { getExtension } from "@/lib/format"
+import { resolveFfmpegPath } from "@/lib/ffmpeg-path"
 import { VIDEO_EXTENSIONS } from "@/lib/types"
+
+const ffmpegPath = resolveFfmpegPath()
 
 /**
  * Decide whether a file should be re-encoded before sending to Groq.

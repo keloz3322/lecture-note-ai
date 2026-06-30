@@ -8,8 +8,8 @@ const nextConfig = {
   },
   outputFileTracingIncludes: {
     "/api/transcribe": [
-      "./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/ffmpeg",
-      "./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/ffmpeg.exe",
+      "./vendor/ffmpeg",
+      "./vendor/ffmpeg.exe",
     ],
   },
 }

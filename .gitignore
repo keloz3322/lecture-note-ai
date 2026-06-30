@@ -9,6 +9,8 @@
 
 # production
 /build
+/vendor/ffmpeg
+/vendor/ffmpeg.exe
 
 # debug
 npm-debug.log*

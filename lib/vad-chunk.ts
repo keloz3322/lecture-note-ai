@@ -3,12 +3,13 @@ import { existsSync } from "node:fs"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import ffmpegPath from "ffmpeg-static"
+import { resolveFfmpegPath } from "@/lib/ffmpeg-path"
 import { getExtension } from "@/lib/format"
 
 // Lightweight serverless-friendly chunking. Avoid native ML runtimes here:
 // large native binaries can push the Vercel Function bundle over its size limit.
 const FRAME_SEC = 0.5
+const ffmpegPath = resolveFfmpegPath()
 
 export interface AudioChunk {
   index: number
