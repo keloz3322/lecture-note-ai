@@ -61,6 +61,7 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
 
   if (file && meta) {
     const duration = formatDuration(meta.durationSeconds)
+    const extensionLabel = getExtension(meta.name) || meta.type.split("/").pop() || "audio"
     return (
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-start gap-3">
@@ -80,7 +81,7 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
                 </>
               )}
               <span aria-hidden>·</span>
-              <span className="uppercase">{getExtension(meta.name)}</span>
+              <span className="uppercase">{extensionLabel}</span>
             </div>
           </div>
           {!disabled && (

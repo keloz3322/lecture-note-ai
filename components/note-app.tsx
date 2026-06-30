@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react"
 import { AlertTriangle, AudioLines, Play, RotateCcw, Sparkles } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
+import { DEMO_FILE_META, DEMO_FILE_NAME } from "@/lib/demo-result"
 import type { AudioFileMeta } from "@/lib/types"
 import { DEFAULT_REFINE_ENGINE, DEFAULT_TRANSCRIPTION_ENGINE } from "@/lib/engines"
 import { EngineSelector } from "./engine-selector"
@@ -11,15 +12,17 @@ import { ResultsPanel } from "./results-panel"
 import { UploadPanel } from "./upload-panel"
 
 export function NoteApp() {
-  const { state, run, reset, changeContentType, stepOrder } = usePipeline()
+  const { state, run, runDemo, reset, changeContentType, stepOrder } = usePipeline()
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<AudioFileMeta | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [transcriptionEngine, setTranscriptionEngine] = useState(DEFAULT_TRANSCRIPTION_ENGINE)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
+  const [isDemo, setIsDemo] = useState(false)
 
   const onSelect = useCallback((selected: File, m: AudioFileMeta) => {
     setValidationError(null)
+    setIsDemo(false)
     setFile(selected)
     setMeta(m)
   }, [])
@@ -27,6 +30,7 @@ export function NoteApp() {
   const onClear = useCallback(() => {
     setFile(null)
     setMeta(null)
+    setIsDemo(false)
     setValidationError(null)
     reset()
   }, [reset])
@@ -36,8 +40,17 @@ export function NoteApp() {
     // Length limits are no longer a hard block: long files are split near
     // detected silence valleys and transcribed in chunks on the server.
     setValidationError(null)
+    setIsDemo(false)
     run(file, meta, { transcriptionEngine, refineEngine })
   }, [file, meta, run, transcriptionEngine, refineEngine])
+
+  const startDemo = useCallback(() => {
+    setValidationError(null)
+    setIsDemo(true)
+    setFile(new File([""], `${DEMO_FILE_NAME}.ogg`, { type: DEMO_FILE_META.type }))
+    setMeta(DEMO_FILE_META)
+    runDemo()
+  }, [runDemo])
 
   const onStart = start
   const onRetry = start
@@ -78,6 +91,7 @@ export function NoteApp() {
               onClear={onClear}
               onValidationError={(m) => {
                 setValidationError(m)
+                setIsDemo(false)
                 setFile(null)
                 setMeta(null)
               }}
@@ -111,15 +125,26 @@ export function NoteApp() {
           {/* Actions */}
           <div className="flex gap-2">
             {!hasStarted ? (
-              <button
-                type="button"
-                onClick={onStart}
-                disabled={!file || !meta}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Play className="size-4" />
-                전사 시작
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={startDemo}
+                  disabled={state.isRunning}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="size-4" />
+                  데모 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={onStart}
+                  disabled={!file || !meta}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Play className="size-4" />
+                  전사 시작
+                </button>
+              </>
             ) : (
               <>
                 {state.error && (
@@ -162,7 +187,7 @@ export function NoteApp() {
             <ResultsPanel
               result={state.result}
               fileName={meta.name}
-              onChangeType={changeContentType}
+              onChangeType={isDemo ? undefined : changeContentType}
               changingType={state.changingType}
             />
           ) : (

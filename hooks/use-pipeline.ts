@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
+import { DEMO_RESULT } from "@/lib/demo-result"
 import type {
   AudioFileMeta,
   PipelineStep,
@@ -199,6 +200,37 @@ export function usePipeline() {
     }
   }, [setStep])
 
+  const runDemo = useCallback(async () => {
+    abortRef.current = false
+    lastTranscriptRef.current = null
+    lastRefineEngineRef.current = undefined
+    setState({
+      steps: initialSteps(),
+      activeStep: null,
+      error: null,
+      result: null,
+      isRunning: true,
+      changingType: false,
+    })
+
+    const advance = async (step: PipelineStep, delayMs: number) => {
+      if (abortRef.current) return false
+      setStep(step, "active")
+      await wait(delayMs)
+      if (abortRef.current) return false
+      setStep(step, "complete")
+      return true
+    }
+
+    if (!(await advance("prepare", 250))) return
+    if (!(await advance("upload", 300))) return
+    if (!(await advance("transcribe", 600))) return
+    if (!(await advance("refine", 650))) return
+    if (abortRef.current) return
+    setStep("done", "complete")
+    setState((prev) => ({ ...prev, result: DEMO_RESULT, isRunning: false, activeStep: "done" }))
+  }, [setStep])
+
   // Re-run only the refine step with a user-selected content type, reusing the
   // cached transcript (no re-upload / re-transcription).
   const changeContentType = useCallback(async (contentType: string) => {
@@ -225,7 +257,7 @@ export function usePipeline() {
     }
   }, [])
 
-  return { state, run, reset, changeContentType, stepOrder: STEP_ORDER }
+  return { state, run, runDemo, reset, changeContentType, stepOrder: STEP_ORDER }
 }
 
 function wait(ms: number) {
