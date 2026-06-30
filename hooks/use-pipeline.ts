@@ -2,7 +2,8 @@
 
 import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
-import { DEMO_RESULT } from "@/lib/demo-result"
+import { getDemoResult } from "@/lib/demo-result"
+import { getTranscriptionEngine } from "@/lib/engines"
 import type {
   AudioFileMeta,
   PipelineStep,
@@ -202,10 +203,12 @@ export function usePipeline() {
     }
   }, [setStep])
 
-  const runDemo = useCallback(async () => {
+  const runDemo = useCallback(async (engines?: EngineSelection) => {
     abortRef.current = false
     lastTranscriptRef.current = null
     lastRefineEngineRef.current = undefined
+    const transcription = getTranscriptionEngine(engines?.transcriptionEngine)
+    const demoTimestampStatus = transcription.supportsTimestamps ? "available" : "unsupported"
     setState({
       steps: initialSteps(),
       activeStep: null,
@@ -230,7 +233,15 @@ export function usePipeline() {
     if (!(await advance("refine", 650))) return
     if (abortRef.current) return
     setStep("done", "complete")
-    setState((prev) => ({ ...prev, result: DEMO_RESULT, isRunning: false, activeStep: "done" }))
+    setState((prev) => ({
+      ...prev,
+      result: getDemoResult({
+        timestampStatus: demoTimestampStatus,
+        transcriptionEngineLabel: transcription.label,
+      }),
+      isRunning: false,
+      activeStep: "done",
+    }))
   }, [setStep])
 
   // Re-run only the refine step with a user-selected content type, reusing the

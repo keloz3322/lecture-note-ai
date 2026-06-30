@@ -78,8 +78,8 @@ export function NoteApp() {
     setIsDemo(true)
     setFile(new File([""], `${DEMO_FILE_NAME}.ogg`, { type: DEMO_FILE_META.type }))
     setMeta(DEMO_FILE_META)
-    runDemo()
-  }, [runDemo])
+    runDemo({ transcriptionEngine, refineEngine })
+  }, [runDemo, transcriptionEngine, refineEngine])
 
   const onStart = start
   const onRetry = start

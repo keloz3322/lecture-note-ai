@@ -1,4 +1,4 @@
-import type { AudioFileMeta, RefineResult } from "@/lib/types"
+import type { AudioFileMeta, RefineResult, TimestampStatus } from "@/lib/types"
 
 export const DEMO_FILE_NAME = "바이브코딩 툴 비교 분석 ｜ 바이브코딩 4강 "
 
@@ -77,4 +77,28 @@ export const DEMO_RESULT: RefineResult = {
       ],
     },
   ],
+}
+
+export function getDemoResult({
+  timestampStatus = "available",
+  transcriptionEngineLabel,
+}: {
+  timestampStatus?: TimestampStatus
+  transcriptionEngineLabel?: string
+} = {}): RefineResult {
+  if (timestampStatus === "available") {
+    return { ...DEMO_RESULT, timestampStatus, timelineNotice: undefined }
+  }
+
+  const timelineNotice =
+    timestampStatus === "unsupported"
+      ? `${transcriptionEngineLabel || "선택한 전사 엔진"}은 타임스탬프를 반환하지 않아 타임라인을 생성하지 않았습니다.`
+      : "이번 전사 결과에는 사용할 수 있는 타임스탬프가 없어 타임라인을 생성하지 않았습니다."
+
+  return {
+    ...DEMO_RESULT,
+    timestampStatus,
+    timeline: [],
+    timelineNotice,
+  }
 }
