@@ -6,6 +6,7 @@ import {
   DIRECT_UPLOAD_MAX_FILE_SIZE,
   SUPPORTED_EXTENSIONS,
   SUPPORTED_MIME_TYPES,
+  type TimestampStatus,
   type TranscribeResult,
   type TranscriptSegment,
   type TranscriptWord,
@@ -111,10 +112,23 @@ async function transcribeBuffer(
 
   if (duration == null || duration <= plan.maxSeconds) {
     const prepared = await prepareForTranscription(buffer, fileName, contentType, engine)
-    return transcribeOne(prepared, engine)
+    return withTranscriptionMetadata(await transcribeOne(prepared, engine), engine)
   }
 
-  return transcribeChunked(buffer, fileName, engine, duration, plan)
+  return withTranscriptionMetadata(await transcribeChunked(buffer, fileName, engine, duration, plan), engine)
+}
+
+function withTranscriptionMetadata(result: TranscribeResult, engine: TranscriptionEngine): TranscribeResult {
+  const timestampStatus: TimestampStatus = engine.supportsTimestamps
+    ? result.segments?.length
+      ? "available"
+      : "unavailable"
+    : "unsupported"
+  return {
+    ...result,
+    timestampStatus,
+    transcriptionEngineLabel: engine.label,
+  }
 }
 
 /** Transcribe a single prepared audio payload with the selected engine. */

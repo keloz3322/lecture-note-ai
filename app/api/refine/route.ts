@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server"
 import { generateObject } from "ai"
 import { z } from "zod"
-import type { RefineResult, RefineSection, TimelineItem, TranscriptSegment, TranscriptWord } from "@/lib/types"
+import type {
+  RefineResult,
+  RefineSection,
+  TimelineItem,
+  TimestampStatus,
+  TranscriptSegment,
+  TranscriptWord,
+} from "@/lib/types"
 import {
   CONTENT_TYPES,
   DEFAULT_CONTENT_TYPE,
@@ -17,6 +24,8 @@ type RefineInput = {
   segments?: TranscriptSegment[]
   words?: TranscriptWord[]
   durationSeconds?: number
+  timestampStatus?: TimestampStatus
+  transcriptionEngineLabel?: string
   overrideType?: ContentTypeId
 }
 
@@ -110,6 +119,8 @@ export async function POST(request: Request) {
       segments?: TranscriptSegment[]
       words?: TranscriptWord[]
       durationSeconds?: number
+      timestampStatus?: TimestampStatus
+      transcriptionEngineLabel?: string
       contentType?: string
       engine?: string
     }
@@ -128,6 +139,8 @@ export async function POST(request: Request) {
       segments: normalizeIncomingSegments(body.segments),
       words: normalizeIncomingWords(body.words),
       durationSeconds: typeof body.durationSeconds === "number" ? body.durationSeconds : undefined,
+      timestampStatus: normalizeTimestampStatus(body.timestampStatus),
+      transcriptionEngineLabel: getText(body.transcriptionEngineLabel),
       overrideType,
     }
     const result = await runRefine(engine, input)
@@ -232,20 +245,34 @@ function buildPrompt({
   segments,
   words,
   durationSeconds,
+  timestampStatus,
+  transcriptionEngineLabel,
   overrideType,
 }: {
   rawTranscript: string
   segments?: TranscriptSegment[]
   words?: TranscriptWord[]
   durationSeconds?: number
+  timestampStatus?: TimestampStatus
+  transcriptionEngineLabel?: string
   overrideType?: ContentTypeId
 }) {
   const timedTranscript = buildTimedTranscript(segments, rawTranscript)
+  const hasTimestamps = timestampStatus === "available" && !!segments?.length
   const wordTimestamps = buildWordTimestamps(words)
   const wordSection = wordTimestamps
     ? `\n\n단어 단위 타임스탬프(필요할 때만 참고):\n${wordTimestamps}`
     : ""
   const durationHint = durationSeconds ? `\n전체 길이: ${formatTimestamp(durationSeconds)}` : ""
+  const timestampRule = hasTimestamps
+    ? `- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
+- timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
+- 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.`
+    : `- 이 전사 결과에는 신뢰할 수 있는 timestamp가 없습니다${
+        transcriptionEngineLabel ? ` (${transcriptionEngineLabel})` : ""
+      }.
+- timeline은 반드시 빈 배열 []로 두세요. 추정 시간, 균등 분할, 가짜 구간을 만들지 마세요.`
+  const transcriptHeading = hasTimestamps ? "타임스탬프 포함 전사" : "전사문"
 
   // The chosen type decides which sections to request and how to detect the type.
   const chosen = overrideType ? getContentType(overrideType) : null
@@ -271,14 +298,12 @@ JSON 키는 detectedType, cleanedTranscript, summary, timeline, keyPoints, secti
 작성 규칙:
 - 원문의 의미를 보존하면서 말더듬, 반복 표현, 불필요한 추임새를 자연스럽게 정리하세요.
 - 전사문에 없는 사실은 새로 만들지 마세요.
-- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
-- timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
-- 단어 단위 timestamp는 segment 경계가 애매하거나 특��� 단어 위치를 확인할 때만 참고하세요.
+${timestampRule}
 - summary는 4~7문장, keyPoints는 5~9개로 작성하세요.
 - sections 배열에는 아래에 명시된 id의 항목만 포함하세요. 각 항목은 { "id": ..., "items": [...] } 형식입니다. 해당 내용이 없으면 items를 빈 배열로 두세요.
 ${sectionInstruction}${durationHint}
 
-타임스탬프 포함 전사:
+${transcriptHeading}:
 ${timedTranscript}${wordSection}`
 }
 
@@ -403,30 +428,60 @@ function normalizeRefineResult(
   input: {
     rawTranscript: string
     segments?: TranscriptSegment[]
+    timestampStatus?: TimestampStatus
+    transcriptionEngineLabel?: string
     overrideType?: ContentTypeId
   },
 ): RefineResult {
   const outer = asRecord(value)
   const record = asRecord(outer.result || outer.data || value)
-  const timeline = normalizeTimeline(record.timeline)
+  const normalizedTimeline = normalizeTimeline(record.timeline)
 
   // Detected type comes from Gemini; an explicit override always wins for contentType.
   const detectedRaw = getText(record.detectedType)
   const detectedType: ContentTypeId = isContentTypeId(detectedRaw) ? detectedRaw : DEFAULT_CONTENT_TYPE
   const contentType: ContentTypeId = input.overrideType ?? detectedType
+  const timestampStatus = normalizeTimelineStatus(input.timestampStatus, input.segments)
+  const timeline =
+    timestampStatus === "available"
+      ? normalizedTimeline.length
+        ? normalizedTimeline
+        : buildFallbackTimeline(input.segments)
+      : []
 
   return {
     contentType,
     detectedType,
+    timestampStatus,
+    timelineNotice: timelineNotice(timestampStatus, input.transcriptionEngineLabel),
     cleanedTranscript:
       getText(record.cleanedTranscript) ||
       getText(record.cleaned_transcript) ||
       input.rawTranscript,
     summary: getText(record.summary) || "요약을 생성하지 못했습니다.",
-    timeline: timeline.length ? timeline : buildFallbackTimeline(input.segments),
+    timeline,
     keyPoints: toStringArray(record.keyPoints || record.key_points),
     sections: buildSections(contentType, record.sections),
   }
+}
+
+function normalizeTimestampStatus(value: unknown): TimestampStatus | undefined {
+  return value === "available" || value === "unsupported" || value === "unavailable" ? value : undefined
+}
+
+function normalizeTimelineStatus(status: TimestampStatus | undefined, segments: TranscriptSegment[] | undefined): TimestampStatus {
+  if (status === "unsupported") return "unsupported"
+  if (status === "available" && segments?.length) return "available"
+  if (segments?.length) return "available"
+  return "unavailable"
+}
+
+function timelineNotice(status: TimestampStatus, engineLabel?: string) {
+  if (status === "available") return undefined
+  if (status === "unsupported") {
+    return `${engineLabel || "선택한 전사 엔진"}은 타임스탬프를 반환하지 않아 타임라인을 생성하지 않았습니다.`
+  }
+  return "이번 전사 결과에는 사용할 수 있는 타임스탬프가 없어 타임라인을 생성하지 않았습니다."
 }
 
 /**

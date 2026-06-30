@@ -17,10 +17,13 @@ interface ResultsPanelProps {
 }
 
 /** Core tabs, with labels that adapt to the content type. */
-function buildCoreTabs(contentType: ContentTypeId): { key: TabKey; label: string; icon: typeof FileText }[] {
+function buildCoreTabs(
+  contentType: ContentTypeId,
+  timelineAvailable: boolean,
+): { key: TabKey; label: string; icon: typeof FileText; disabled?: boolean }[] {
   return [
     { key: "summary", label: "요약", icon: FileText },
-    { key: "timeline", label: getCoreLabel(contentType, "timeline"), icon: Clock3 },
+    { key: "timeline", label: getCoreLabel(contentType, "timeline"), icon: Clock3, disabled: !timelineAvailable },
     { key: "keyPoints", label: getCoreLabel(contentType, "keyPoints"), icon: ListChecks },
     { key: "transcript", label: "정리된 전사문", icon: ScrollText },
   ]
@@ -35,8 +38,9 @@ function sectionIcon(kind: RefineSection["kind"]) {
 export function ResultsPanel({ result, fileName, onChangeType, changingType }: ResultsPanelProps) {
   const [tab, setTab] = useState<TabKey>("summary")
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
+  const timelineAvailable = result.timestampStatus === "available"
 
-  const coreTabs = useMemo(() => buildCoreTabs(result.contentType), [result.contentType])
+  const coreTabs = useMemo(() => buildCoreTabs(result.contentType, timelineAvailable), [result.contentType, timelineAvailable])
 
   // Only show section tabs that actually have content.
   const sectionTabs = useMemo(() => result.sections.filter((s) => s.items.length > 0), [result.sections])
@@ -44,7 +48,10 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
   // When the content type changes, the active tab may point at a section that no
   // longer exists. Fall back to the summary tab so the panel never goes blank.
   useEffect(() => {
-    const validKeys = new Set<TabKey>([...coreTabs.map((t) => t.key), ...sectionTabs.map((s) => s.id)])
+    const validKeys = new Set<TabKey>([
+      ...coreTabs.filter((t) => !t.disabled).map((t) => t.key),
+      ...sectionTabs.map((s) => s.id),
+    ])
     if (!validKeys.has(tab)) setTab("summary")
   }, [coreTabs, sectionTabs, tab])
 
@@ -86,8 +93,15 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
-        {coreTabs.map(({ key, label, icon: Icon }) => (
-          <TabButton key={key} active={tab === key} onClick={() => setTab(key)} icon={Icon} label={label} />
+        {coreTabs.map(({ key, label, icon: Icon, disabled }) => (
+          <TabButton
+            key={key}
+            active={tab === key}
+            disabled={disabled}
+            onClick={() => setTab(key)}
+            icon={Icon}
+            label={label}
+          />
         ))}
         {sectionTabs.map((section) => (
           <TabButton
@@ -100,6 +114,13 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
         ))}
       </div>
 
+      {!timelineAvailable && result.timelineNotice && (
+        <div className="flex items-start gap-2 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
+          <Clock3 className="mt-0.5 size-3.5 shrink-0" />
+          <span>{result.timelineNotice}</span>
+        </div>
+      )}
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         <TabContent result={result} tab={tab} />
@@ -110,11 +131,13 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
 
 function TabButton({
   active,
+  disabled,
   onClick,
   icon: Icon,
   label,
 }: {
   active: boolean
+  disabled?: boolean
   onClick: () => void
   icon: typeof FileText
   label: string
@@ -123,9 +146,15 @@ function TabButton({
     <button
       role="tab"
       aria-selected={active}
+      aria-disabled={disabled}
+      disabled={disabled}
       onClick={onClick}
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+        disabled
+          ? "cursor-not-allowed text-muted-foreground/45"
+          : active
+            ? "bg-secondary text-foreground"
+            : "text-muted-foreground hover:text-foreground"
       }`}
     >
       <Icon className="size-3.5" />

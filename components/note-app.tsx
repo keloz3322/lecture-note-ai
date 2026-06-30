@@ -32,6 +32,22 @@ export function NoteApp() {
       refine: `${statusEngineName(refine.label)}로 교정 · 요약 중`,
     }
   }, [transcriptionEngine, refineEngine])
+  const progressDetails = useMemo(() => {
+    const transcription = getTranscriptionEngine(transcriptionEngine)
+    const refine = getRefineEngine(refineEngine)
+    const transcriptionName = statusEngineName(transcription.label)
+    const refineName = statusEngineName(refine.label)
+    const timestampNote = transcription.supportsTimestamps
+      ? "완료되면 타임스탬프 기반 타임라인을 함께 만들 수 있습니다."
+      : "이 엔진은 타임스탬프를 반환하지 않아 결과에서 타임라인을 비활성화합니다."
+
+    return {
+      prepare: "파일 형식과 브라우저에서 읽을 수 있는 길이 정보를 확인합니다.",
+      upload: "Vercel Blob에 임시 업로드한 뒤 서버에서 처리합니다. 오디오는 처리 후 삭제됩니다.",
+      transcribe: `${transcriptionName} 전사는 스트리밍되지 않고 완료 후 한 번에 반환됩니다. 큰 파일은 압축하거나 무음 구간 기준으로 나눕니다. ${timestampNote}`,
+      refine: `${refineName}가 전사문을 정리하고 콘텐츠 유형별 노트 형식으로 재구성합니다.`,
+    }
+  }, [transcriptionEngine, refineEngine])
 
   const onSelect = useCallback((selected: File, m: AudioFileMeta) => {
     setValidationError(null)
@@ -185,7 +201,7 @@ export function NoteApp() {
           {hasStarted && (
             <section className="rounded-lg border border-border bg-card p-4">
               <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">진행 상태</h2>
-              <ProgressSteps order={stepOrder} steps={state.steps} labels={progressLabels} />
+              <ProgressSteps order={stepOrder} steps={state.steps} labels={progressLabels} details={progressDetails} />
             </section>
           )}
 

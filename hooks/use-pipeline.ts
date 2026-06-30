@@ -184,6 +184,8 @@ export function usePipeline() {
           segments: transcribed.segments,
           words: transcribed.words,
           durationSeconds: transcribed.durationSeconds,
+          timestampStatus: transcribed.timestampStatus,
+          transcriptionEngineLabel: transcribed.transcriptionEngineLabel,
           engine: engines?.refineEngine,
         })
       } catch (e) {
@@ -244,6 +246,8 @@ export function usePipeline() {
         segments: transcribed.segments,
         words: transcribed.words,
         durationSeconds: transcribed.durationSeconds,
+        timestampStatus: transcribed.timestampStatus,
+        transcriptionEngineLabel: transcribed.transcriptionEngineLabel,
         contentType,
         engine: lastRefineEngineRef.current,
       })

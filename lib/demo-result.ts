@@ -12,6 +12,7 @@ export const DEMO_FILE_META: AudioFileMeta = {
 export const DEMO_RESULT: RefineResult = {
   contentType: "lecture",
   detectedType: "lecture",
+  timestampStatus: "available",
   summary:
     "이 강의는 AI 모델과 바이브 코딩 도구를 실제 개발 목적에 맞게 비교합니다. ChatGPT, Claude, Gemini, Grok 같은 모델은 각기 강점이 다르지만, 결과 품질은 모델보다 사용자의 요구사항 정의와 피드백 방식에 더 크게 좌우된다고 설명합니다. 웹빌더 계열에서는 v0, Replit, Google AI Studio를 비교하고, 코드 에디터 계열에서는 Claude Code와 Cursor의 차이를 짚습니다. 결론적으로 빠른 웹 프로토타입은 v0, 깊은 코드 작업은 Claude Code가 유리하지만, 가장 중요한 것은 도구보다 도메인 지식과 기획력입니다.",
   timeline: [
@@ -73,17 +74,6 @@ export const DEMO_RESULT: RefineResult = {
         "Replit과 Google AI Studio는 각각 어떤 상황에서 장점이 있는가?",
         "Claude Code와 Cursor의 작업 방식 차이는 무엇인가?",
         "바이브 코딩 도구를 선택하기 전에 먼저 정해야 할 기준은 무엇인가?",
-      ],
-    },
-    {
-      id: "actionItems",
-      title: "할 일",
-      kind: "list",
-      items: [
-        "만들고 싶은 서비스의 핵심 사용자 흐름을 한 문장으로 정리한다.",
-        "v0로 첫 화면과 주요 상태를 빠르게 만든 뒤, 실제 동작이 필요한 부분을 분리한다.",
-        "Claude Code나 Cursor로 API, 데이터 흐름, 예외 처리를 점검한다.",
-        "완성 후에는 배포 환경에서 실제 파일과 API 키로 한 번 더 검증한다.",
       ],
     },
   ],

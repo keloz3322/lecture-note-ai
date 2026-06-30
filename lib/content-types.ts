@@ -53,7 +53,6 @@ export const CONTENT_TYPES: ContentTypeDef[] = [
     coreLabels: { timeline: "강의 흐름", keyPoints: "핵심 개념" },
     sections: [
       { id: "studyQuestions", title: "복습 질문", kind: "qa", instruction: "학습 내용을 점검할 복습 질문 4~7개" },
-      { id: "actionItems", title: "할 일", kind: "list", instruction: "학습자가 이어서 할 일이나 과제 3~6개" },
     ],
   },
   {
@@ -102,9 +101,7 @@ export const CONTENT_TYPES: ContentTypeDef[] = [
     label: "일반",
     description: "메모, 음성 일기, 기타 녹음",
     promptGuidance: "내용의 성격에 맞춰 핵심을 간결하고 읽기 쉽게 정리하세요.",
-    sections: [
-      { id: "actionItems", title: "할 일", kind: "list", instruction: "내용에서 도출되는 할 일이나 후속 작업 (없으면 빈 배열)" },
-    ],
+    sections: [],
   },
 ]
 

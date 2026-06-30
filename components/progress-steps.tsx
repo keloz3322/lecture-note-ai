@@ -15,15 +15,17 @@ interface ProgressStepsProps {
   order: PipelineStep[]
   steps: Record<PipelineStep, StepStatus>
   labels?: Partial<Record<PipelineStep, string>>
+  details?: Partial<Record<PipelineStep, string>>
 }
 
-export function ProgressSteps({ order, steps, labels }: ProgressStepsProps) {
+export function ProgressSteps({ order, steps, labels, details }: ProgressStepsProps) {
   return (
     <ol className="flex flex-col gap-1">
       {order.map((step, i) => {
         const status = steps[step]
         const isLast = i === order.length - 1
         const label = labels?.[step] ?? STEP_LABELS[step]
+        const detail = status === "active" ? details?.[step] : undefined
         return (
           <li key={step} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -50,6 +52,7 @@ export function ProgressSteps({ order, steps, labels }: ProgressStepsProps) {
                 {label}
               </p>
               <p className="text-xs text-muted-foreground">{statusLabel(status)}</p>
+              {detail && <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-muted-foreground">{detail}</p>}
             </div>
           </li>
         )

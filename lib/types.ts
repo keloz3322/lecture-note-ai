@@ -91,7 +91,11 @@ export interface TranscribeResult {
   durationSeconds?: number
   segments?: TranscriptSegment[]
   words?: TranscriptWord[]
+  timestampStatus?: TimestampStatus
+  transcriptionEngineLabel?: string
 }
+
+export type TimestampStatus = "available" | "unsupported" | "unavailable"
 
 export interface TranscriptSegment {
   id?: number
@@ -124,6 +128,10 @@ export interface RefineResult {
   contentType: ContentTypeId
   /** The type Gemini detected from the transcript (may differ if user overrode it). */
   detectedType: ContentTypeId
+  /** Whether the selected transcription engine produced usable timestamps. */
+  timestampStatus: TimestampStatus
+  /** Reader-facing note shown when timeline generation is unavailable. */
+  timelineNotice?: string
   cleanedTranscript: string
   summary: string
   timeline: TimelineItem[]
