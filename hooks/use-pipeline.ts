@@ -12,7 +12,9 @@ import type {
 } from "@/lib/types"
 
 const STEP_ORDER: PipelineStep[] = ["prepare", "upload", "transcribe", "refine", "done"]
-const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD === "true"
+// Blob upload is the default path (it bypasses the ~4.5MB serverless body limit).
+// Set NEXT_PUBLIC_ENABLE_BLOB_UPLOAD="false" to force the legacy direct-upload path.
+const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false"
 
 export interface PipelineState {
   steps: Record<PipelineStep, StepStatus>
@@ -98,10 +100,11 @@ export function usePipeline() {
       if (ENABLE_BLOB_UPLOAD) {
         try {
           const blob = await upload(file.name, file, {
-            access: "public",
+            access: "private",
             handleUploadUrl: "/api/upload",
             contentType: file.type || undefined,
-            multipart: false,
+            // Multipart for larger files makes the direct-to-Blob upload more resilient.
+            multipart: file.size > 20 * 1024 * 1024,
             clientPayload: JSON.stringify({ fileName: file.name, size: file.size, type: file.type }),
           })
           uploaded = {
@@ -127,6 +130,7 @@ export function usePipeline() {
           transcribed = await postForm<TranscribeResult>("/api/transcribe", form)
         } else {
           transcribed = await postJson<TranscribeResult>("/api/transcribe", {
+            pathname: uploaded.pathname,
             audioUrl: uploaded.audioUrl,
             fileName: uploaded.fileName,
           })

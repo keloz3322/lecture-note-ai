@@ -4,11 +4,14 @@
 export const SUPPORTED_EXTENSIONS = ["mp3", "m4a", "wav", "webm", "ogg"] as const
 export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number]
 
-// 25MB MVP limit
-export const MAX_FILE_SIZE = 25 * 1024 * 1024
+// Max size for the Blob-based upload path (client uploads straight to Vercel Blob,
+// so this is bounded by Groq Whisper's own file limit rather than the serverless body limit).
+export const MAX_FILE_SIZE = 100 * 1024 * 1024
+// Used only when Blob upload is disabled and the file goes through the serverless
+// request body, which Vercel caps at ~4.5MB.
 export const DIRECT_UPLOAD_MAX_FILE_SIZE = Math.floor(4.2 * 1024 * 1024)
 export const ACTIVE_UPLOAD_MAX_FILE_SIZE =
-  process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD === "true" ? MAX_FILE_SIZE : DIRECT_UPLOAD_MAX_FILE_SIZE
+  process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false" ? MAX_FILE_SIZE : DIRECT_UPLOAD_MAX_FILE_SIZE
 
 export const SUPPORTED_MIME_TYPES = [
   "audio/mpeg",

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { del } from "@vercel/blob"
+import { del, get } from "@vercel/blob"
 import {
   DIRECT_UPLOAD_MAX_FILE_SIZE,
   SUPPORTED_EXTENSIONS,
@@ -11,13 +11,15 @@ import {
 import { getExtension } from "@/lib/format"
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+// Larger files need more time to download from Blob and transcribe via Groq.
+// Capped automatically to the plan's max (60s on Hobby, up to 300s on Pro).
+export const maxDuration = 300
 
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 const DEFAULT_GROQ_MODEL = "whisper-large-v3"
 
 export async function POST(request: Request) {
-  let audioUrl: string | undefined
+  let cleanupTarget: string | undefined
   try {
     const apiKey = process.env.GROQ_API_KEY
     if (!apiKey) {
@@ -36,26 +38,28 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json().catch(() => ({}))) as {
+      pathname?: string
       audioUrl?: string
       fileName?: string
     }
-    audioUrl = body.audioUrl
+    cleanupTarget = body.pathname ?? body.audioUrl
 
-    if (!body.audioUrl || !isHttpUrl(body.audioUrl)) {
+    if (!body.pathname) {
       return NextResponse.json({ error: "전사할 오디오 정보가 없습니다." }, { status: 400 })
     }
 
-    const result = await transcribeWithGroq({
-      apiKey,
-      audioUrl: body.audioUrl,
-      fileName: body.fileName ?? "lecture-audio.ogg",
-    })
+    const fileName = body.fileName ?? "lecture-audio.ogg"
+    // The Blob store is private, so Groq cannot fetch the URL directly.
+    // Download the file server-side (Blob -> server, bypassing the request body limit)
+    // and hand it to Groq as a file upload.
+    const file = await downloadPrivateBlob(body.pathname, fileName)
+    const result = await transcribeFileWithGroq(apiKey, file)
     return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : "전사에 실패했습니다. 잠시 후 다시 시도해 주세요."
     return NextResponse.json({ error: message }, { status: 500 })
   } finally {
-    if (audioUrl) await deleteTemporaryBlob(audioUrl)
+    if (cleanupTarget) await deleteTemporaryBlob(cleanupTarget)
   }
 }
 
@@ -89,50 +93,15 @@ async function transcribeFileWithGroq(apiKey: string, file: File): Promise<Trans
   return normalizeGroqResult(fileResult.data)
 }
 
-async function transcribeWithGroq({
-  apiKey,
-  audioUrl,
-  fileName,
-}: {
-  apiKey: string
-  audioUrl: string
-  fileName: string
-}): Promise<TranscribeResult> {
-  const model = process.env.GROQ_TRANSCRIPTION_MODEL || DEFAULT_GROQ_MODEL
-  const urlResult = await requestGroq(apiKey, buildUrlForm(audioUrl, model))
-
-  if (urlResult.ok) return normalizeGroqResult(urlResult.data)
-  if (!shouldFallbackToFile(urlResult.status, urlResult.errorText)) {
-    throw new Error(groqErrorMessage(urlResult.status, urlResult.errorText))
+async function downloadPrivateBlob(pathname: string, fileName: string): Promise<File> {
+  const result = await get(pathname, { access: "private" })
+  if (!result || !result.stream) {
+    throw new Error("업로드된 오디오 파일을 찾을 수 없습니다.")
   }
 
-  const audioResponse = await fetch(audioUrl)
-  if (!audioResponse.ok) {
-    throw new Error("업로드된 오디오 파일을 다시 읽지 못했습니다.")
-  }
-
-  const audioBlob = await audioResponse.blob()
-  const fileForm = new FormData()
-  fileForm.append("model", model)
-  fileForm.append("response_format", "verbose_json")
-  fileForm.append("temperature", "0")
-  appendTimestampOptions(fileForm)
-  fileForm.append("file", new File([audioBlob], fileName, { type: audioBlob.type || "audio/ogg" }))
-
-  const fileResult = await requestGroq(apiKey, fileForm)
-  if (!fileResult.ok) throw new Error(groqErrorMessage(fileResult.status, fileResult.errorText))
-
-  return normalizeGroqResult(fileResult.data)
-}
-
-function buildUrlForm(audioUrl: string, model: string) {
-  const form = new FormData()
-  form.append("model", model)
-  form.append("url", audioUrl)
-  form.append("response_format", "verbose_json")
-  form.append("temperature", "0")
-  appendTimestampOptions(form)
-  return form
+  const arrayBuffer = await new Response(result.stream).arrayBuffer()
+  const contentType = result.blob.contentType || "audio/ogg"
+  return new File([arrayBuffer], fileName, { type: contentType })
 }
 
 function appendTimestampOptions(form: FormData) {
@@ -212,10 +181,6 @@ function toNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
-function shouldFallbackToFile(status: number, errorText: string) {
-  return status === 400 && /\burl\b/i.test(errorText)
-}
-
 function groqErrorMessage(status: number, errorText: string) {
   const detail = extractErrorMessage(errorText)
   return detail ? `Groq 전사 실패 (${status}): ${detail}` : `Groq 전사 실패 (${status})`
@@ -234,19 +199,12 @@ function getText(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function isHttpUrl(value: string) {
+async function deleteTemporaryBlob(urlOrPathname: string) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return
   try {
-    const url = new URL(value)
-    return url.protocol === "https:" || url.protocol === "http:"
-  } catch {
-    return false
-  }
-}
-
-async function deleteTemporaryBlob(audioUrl: string) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN || !audioUrl.includes("blob.vercel-storage.com")) return
-  try {
-    await del(audioUrl)
+    // Accepts either a blob URL or a pathname (private blob URLs aren't publicly
+    // routable, so we delete by pathname when available).
+    await del(urlOrPathname)
   } catch {
     // Best-effort cleanup. A failed delete should not hide a successful transcript.
   }

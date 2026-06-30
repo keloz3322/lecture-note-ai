@@ -22,7 +22,8 @@ export async function POST(request: Request) {
         }
 
         if (payload.size && payload.size > MAX_FILE_SIZE) {
-          throw new Error("파일 크기가 25MB를 초과했습니다.")
+          const limitMb = Math.floor(MAX_FILE_SIZE / (1024 * 1024))
+          throw new Error(`파일 크기가 ${limitMb}MB를 초과했습니다.`)
         }
 
         if (payload.type && !isSupportedMimeType(payload.type)) {
