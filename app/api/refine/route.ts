@@ -38,7 +38,8 @@ const refineZodSchema = z.object({
 })
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+// LLM refine over long transcripts can exceed the default 60s; give it headroom.
+export const maxDuration = 300
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
@@ -272,7 +273,7 @@ JSON 키는 detectedType, cleanedTranscript, summary, timeline, keyPoints, secti
 - 전사문에 없는 사실은 새로 만들지 마세요.
 - timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
 - timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
-- 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.
+- 단어 단위 timestamp는 segment 경계가 애매하거나 특��� 단어 위치를 확인할 때만 참고하세요.
 - summary는 4~7문장, keyPoints는 5~9개로 작성하세요.
 - sections 배열에는 아래에 명시된 id의 항목만 포함하세요. 각 항목은 { "id": ..., "items": [...] } 형식입니다. 해당 내용이 없으면 items를 빈 배열로 두세요.
 ${sectionInstruction}${durationHint}

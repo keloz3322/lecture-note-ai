@@ -18,9 +18,12 @@ class PayloadTooLargeError extends Error {}
 class MediaTooLongError extends Error {}
 
 export const runtime = "nodejs"
-// Larger files need more time to download from Blob and transcribe.
-// Capped automatically to the plan's max (60s on Hobby, up to 300s on Pro).
-export const maxDuration = 300
+// Download from Blob + ffmpeg transcode + transcription is the heaviest path.
+// Pro allows up to 800s; give it a generous budget for large/long media.
+// NOTE: Memory/CPU is NOT set here. With Fluid Compute (default on Pro) it cannot
+// be configured via code or vercel.json — adjust it in the Vercel dashboard
+// (Project → Settings → Functions) up to 4GB / 2 vCPU if ffmpeg needs more.
+export const maxDuration = 800
 
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 
