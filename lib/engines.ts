@@ -94,7 +94,7 @@ export const REFINE_ENGINES: RefineEngine[] = [
   },
   {
     id: "gemini",
-    label: "Gemini API (직접)",
+    label: "Gemini API",
     description: "Google Gemini 외부 API 직접 호출",
     via: "gemini",
     modelId: "gemini-2.5-flash",
