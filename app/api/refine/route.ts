@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { generateObject } from "ai"
+import { z } from "zod"
 import type { RefineResult, RefineSection, TimelineItem, TranscriptSegment, TranscriptWord } from "@/lib/types"
 import {
   CONTENT_TYPES,
@@ -8,6 +10,32 @@ import {
   type ContentTypeDef,
   type ContentTypeId,
 } from "@/lib/content-types"
+import { getRefineEngine, type RefineEngine } from "@/lib/engines"
+
+type RefineInput = {
+  rawTranscript: string
+  segments?: TranscriptSegment[]
+  words?: TranscriptWord[]
+  durationSeconds?: number
+  overrideType?: ContentTypeId
+}
+
+/** Zod schema for the Gateway (generateObject) path — mirrors refineSchema. */
+const refineZodSchema = z.object({
+  detectedType: z.enum(CONTENT_TYPES.map((t) => t.id) as [string, ...string[]]),
+  cleanedTranscript: z.string(),
+  summary: z.string(),
+  timeline: z.array(
+    z.object({
+      start: z.number(),
+      end: z.number(),
+      title: z.string(),
+      summary: z.string(),
+    }),
+  ),
+  keyPoints: z.array(z.string()),
+  sections: z.array(z.object({ id: z.string(), items: z.array(z.string()) })),
+})
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -82,28 +110,26 @@ export async function POST(request: Request) {
       words?: TranscriptWord[]
       durationSeconds?: number
       contentType?: string
+      engine?: string
     }
 
     if (!body.rawTranscript || body.rawTranscript.trim().length === 0) {
       return NextResponse.json({ error: "교정/요약할 전사문이 없습니다." }, { status: 400 })
     }
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "Gemini API 키가 서버에 설정되어 있지 않습니다." }, { status: 500 })
-    }
+    const engine = getRefineEngine(body.engine)
 
-    // If the user explicitly chose a type, force it; otherwise let Gemini detect.
+    // If the user explicitly chose a type, force it; otherwise let the model detect.
     const overrideType = isContentTypeId(body.contentType) ? body.contentType : undefined
 
-    const input = {
+    const input: RefineInput = {
       rawTranscript: body.rawTranscript,
       segments: normalizeIncomingSegments(body.segments),
       words: normalizeIncomingWords(body.words),
       durationSeconds: typeof body.durationSeconds === "number" ? body.durationSeconds : undefined,
       overrideType,
     }
-    const result = await refineWithGemini(apiKey, input)
+    const result = await runRefine(engine, input)
 
     return NextResponse.json(result)
   } catch (error) {
@@ -115,16 +141,33 @@ export async function POST(request: Request) {
   }
 }
 
-async function refineWithGemini(
-  apiKey: string,
-  input: {
-    rawTranscript: string
-    segments?: TranscriptSegment[]
-    words?: TranscriptWord[]
-    durationSeconds?: number
-    overrideType?: ContentTypeId
-  },
-): Promise<RefineResult> {
+/** Route the refine request to the selected engine. */
+async function runRefine(engine: RefineEngine, input: RefineInput): Promise<RefineResult> {
+  if (engine.via === "gemini") {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) throw new Error("Gemini API 키가 서버에 설정되어 있지 않습니다.")
+    return refineWithGemini(apiKey, input)
+  }
+  return refineWithGateway(engine, input)
+}
+
+/** Refine via the Vercel AI Gateway using the AI SDK's generateObject(). */
+async function refineWithGateway(engine: RefineEngine, input: RefineInput): Promise<RefineResult> {
+  try {
+    const { object } = await generateObject({
+      model: engine.modelId,
+      schema: refineZodSchema,
+      prompt: buildPrompt(input),
+      temperature: 0.1,
+    })
+    return normalizeRefineResult(object, input)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`AI Gateway 교정/요약 실패 (${engine.modelId}): ${detail}`)
+  }
+}
+
+async function refineWithGemini(apiKey: string, input: RefineInput): Promise<RefineResult> {
   const prompt = buildPrompt(input)
   let lastError: Error | null = null
 

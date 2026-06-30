@@ -4,6 +4,8 @@ import { useCallback, useState } from "react"
 import { AlertTriangle, AudioLines, Play, RotateCcw, Sparkles } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
 import type { AudioFileMeta } from "@/lib/types"
+import { DEFAULT_REFINE_ENGINE, DEFAULT_TRANSCRIPTION_ENGINE } from "@/lib/engines"
+import { EngineSelector } from "./engine-selector"
 import { ProgressSteps } from "./progress-steps"
 import { ResultsPanel } from "./results-panel"
 import { UploadPanel } from "./upload-panel"
@@ -13,6 +15,8 @@ export function NoteApp() {
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<AudioFileMeta | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [transcriptionEngine, setTranscriptionEngine] = useState(DEFAULT_TRANSCRIPTION_ENGINE)
+  const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
 
   const onSelect = useCallback((selected: File, m: AudioFileMeta) => {
     setValidationError(null)
@@ -28,12 +32,12 @@ export function NoteApp() {
   }, [reset])
 
   const onStart = useCallback(() => {
-    if (file && meta) run(file, meta)
-  }, [file, meta, run])
+    if (file && meta) run(file, meta, { transcriptionEngine, refineEngine })
+  }, [file, meta, run, transcriptionEngine, refineEngine])
 
   const onRetry = useCallback(() => {
-    if (file && meta) run(file, meta)
-  }, [file, meta, run])
+    if (file && meta) run(file, meta, { transcriptionEngine, refineEngine })
+  }, [file, meta, run, transcriptionEngine, refineEngine])
 
   const error = validationError ?? state.error
   const hasStarted = state.isRunning || state.result !== null || state.error !== null
@@ -53,7 +57,7 @@ export function NoteApp() {
           </div>
           <span className="hidden items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
             <Sparkles className="size-3" />
-            Groq + Gemini
+            AI Gateway
           </span>
         </div>
       </header>
@@ -74,6 +78,17 @@ export function NoteApp() {
                 setFile(null)
                 setMeta(null)
               }}
+            />
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">엔진</h2>
+            <EngineSelector
+              transcriptionEngine={transcriptionEngine}
+              refineEngine={refineEngine}
+              disabled={state.isRunning}
+              onTranscriptionChange={setTranscriptionEngine}
+              onRefineChange={setRefineEngine}
             />
           </section>
 

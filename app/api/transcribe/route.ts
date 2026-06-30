@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { del, get } from "@vercel/blob"
+import { transcribe } from "ai"
+import { gateway } from "@ai-sdk/gateway"
 import {
   DIRECT_UPLOAD_MAX_FILE_SIZE,
-  GROQ_MAX_FILE_SIZE,
-  REENCODE_THRESHOLD,
   SUPPORTED_EXTENSIONS,
   SUPPORTED_MIME_TYPES,
   type TranscribeResult,
@@ -12,35 +12,35 @@ import {
 } from "@/lib/types"
 import { getExtension, formatBytes } from "@/lib/format"
 import { reencodeToOpus, shouldReencode } from "@/lib/transcode"
+import { getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
 
 class PayloadTooLargeError extends Error {}
 
 export const runtime = "nodejs"
-// Larger files need more time to download from Blob and transcribe via Groq.
+// Larger files need more time to download from Blob and transcribe.
 // Capped automatically to the plan's max (60s on Hobby, up to 300s on Pro).
 export const maxDuration = 300
 
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
-const DEFAULT_GROQ_MODEL = "whisper-large-v3"
+
+/** Re-encode when within 1MB of the engine's hard limit. */
+function reencodeThresholdFor(engine: TranscriptionEngine) {
+  return Math.max(engine.maxFileSize - 1024 * 1024, 1024 * 1024)
+}
 
 export async function POST(request: Request) {
   let cleanupTarget: string | undefined
   try {
-    const apiKey = process.env.GROQ_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "Groq API 키가 서버에 설정되어 있지 않습니다." }, { status: 500 })
-    }
-
     if (request.headers.get("content-type")?.includes("multipart/form-data")) {
       const form = await request.formData()
       const file = form.get("file")
       if (!(file instanceof File)) {
         return NextResponse.json({ error: "전사할 오디오 파일이 없습니다." }, { status: 400 })
       }
+      const engine = getTranscriptionEngine(getFormString(form.get("engine")))
       validateDirectUpload(file)
       const buffer = Buffer.from(await file.arrayBuffer())
-      const prepared = await prepareForGroq(buffer, file.name, file.type)
-      const result = await transcribeFileWithGroq(apiKey, prepared)
+      const result = await transcribeBuffer(buffer, file.name, file.type, engine)
       return NextResponse.json(result)
     }
 
@@ -48,20 +48,21 @@ export async function POST(request: Request) {
       pathname?: string
       audioUrl?: string
       fileName?: string
+      engine?: string
     }
     cleanupTarget = body.pathname ?? body.audioUrl
+    const engine = getTranscriptionEngine(body.engine)
 
     if (!body.pathname) {
       return NextResponse.json({ error: "전사할 오디오 정보가 없습니다." }, { status: 400 })
     }
 
-    const fileName = body.fileName ?? "lecture-audio.ogg"
-    // The Blob store is private, so Groq cannot fetch the URL directly.
+    const fileName = body.fileName ?? "audio.ogg"
+    // The Blob store is private, so the provider cannot fetch the URL directly.
     // Download the file server-side (Blob -> server, bypassing the request body limit),
-    // compress it if needed, and hand it to Groq as a file upload.
+    // compress it if needed, and hand it to the selected engine.
     const { buffer, contentType } = await downloadPrivateBlob(body.pathname)
-    const prepared = await prepareForGroq(buffer, fileName, contentType)
-    const result = await transcribeFileWithGroq(apiKey, prepared)
+    const result = await transcribeBuffer(buffer, fileName, contentType, engine)
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof PayloadTooLargeError) {
@@ -89,19 +90,94 @@ function validateDirectUpload(file: File) {
   }
 }
 
-async function transcribeFileWithGroq(apiKey: string, file: File): Promise<TranscribeResult> {
-  const model = process.env.GROQ_TRANSCRIPTION_MODEL || DEFAULT_GROQ_MODEL
+/** Prepare the media and route it to the selected transcription engine. */
+async function transcribeBuffer(
+  buffer: Buffer,
+  fileName: string,
+  contentType: string,
+  engine: TranscriptionEngine,
+): Promise<TranscribeResult> {
+  const prepared = await prepareForTranscription(buffer, fileName, contentType, engine)
+
+  if (engine.via === "groq") {
+    const apiKey = process.env.GROQ_API_KEY
+    if (!apiKey) throw new Error("Groq API 키가 서버에 설정되어 있지 않습니다.")
+    return transcribeWithGroq(apiKey, prepared, engine)
+  }
+
+  return transcribeWithGateway(prepared, engine)
+}
+
+interface PreparedAudio {
+  bytes: Buffer
+  fileName: string
+  mediaType: string
+}
+
+async function transcribeWithGroq(
+  apiKey: string,
+  prepared: PreparedAudio,
+  engine: TranscriptionEngine,
+): Promise<TranscribeResult> {
   const fileForm = new FormData()
-  fileForm.append("model", model)
+  fileForm.append("model", process.env.GROQ_TRANSCRIPTION_MODEL || engine.modelId)
   fileForm.append("response_format", "verbose_json")
   fileForm.append("temperature", "0")
   appendTimestampOptions(fileForm)
-  fileForm.append("file", file, file.name)
+  fileForm.append("file", new File([prepared.bytes], prepared.fileName, { type: prepared.mediaType }), prepared.fileName)
 
   const fileResult = await requestGroq(apiKey, fileForm)
   if (!fileResult.ok) throw new Error(groqErrorMessage(fileResult.status, fileResult.errorText))
 
   return normalizeGroqResult(fileResult.data)
+}
+
+/** Transcribe via the Vercel AI Gateway using the AI SDK's transcribe(). */
+async function transcribeWithGateway(
+  prepared: PreparedAudio,
+  engine: TranscriptionEngine,
+): Promise<TranscribeResult> {
+  try {
+    const result = await transcribe({
+      model: gateway.transcriptionModel(engine.modelId),
+      audio: new Uint8Array(prepared.bytes),
+      // Best-effort: ask Whisper for segment timestamps. Ignored by models that
+      // don't support them (e.g. gpt-4o-transcribe).
+      ...(engine.supportsTimestamps
+        ? { providerOptions: { openai: { timestampGranularities: ["segment"] } } }
+        : {}),
+    })
+
+    const rawTranscript = result.text?.trim()
+    if (!rawTranscript) throw new Error("전사 결과가 비어 있습니다.")
+
+    return {
+      rawTranscript,
+      language: result.language || undefined,
+      durationSeconds: result.durationInSeconds || undefined,
+      segments: normalizeGatewaySegments(result.segments),
+      words: undefined,
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`AI Gateway 전사 실패 (${engine.modelId}): ${detail}`)
+  }
+}
+
+function normalizeGatewaySegments(
+  segments: { text: string; startSecond: number; endSecond: number }[] | undefined,
+): TranscriptSegment[] | undefined {
+  if (!Array.isArray(segments) || segments.length === 0) return undefined
+  const mapped = segments
+    .map((seg) => {
+      const start = toNumber(seg.startSecond)
+      const end = toNumber(seg.endSecond)
+      const text = getText(seg.text)
+      if (start == null || end == null || !text) return null
+      return { start, end, text }
+    })
+    .filter((item): item is TranscriptSegment => item !== null)
+  return mapped.length > 0 ? mapped : undefined
 }
 
 async function downloadPrivateBlob(pathname: string): Promise<{ buffer: Buffer; contentType: string }> {
@@ -118,27 +194,38 @@ async function downloadPrivateBlob(pathname: string): Promise<{ buffer: Buffer; 
 }
 
 /**
- * Prepare the downloaded media for Groq. Files that are video or larger than the
- * re-encode threshold are compressed to Opus (16kHz mono, 32kbps). If the result
- * still exceeds Groq's free-tier limit, we stop and surface a clear message
- * (chunking is intentionally not implemented yet).
+ * Prepare the downloaded media for the selected engine. Files that are video or
+ * larger than the engine's re-encode threshold are compressed to Opus (16kHz
+ * mono, 32kbps). If the result still exceeds the engine's hard limit, we stop and
+ * surface a clear message (chunking is intentionally not implemented yet).
  */
-async function prepareForGroq(buffer: Buffer, fileName: string, contentType: string): Promise<File> {
-  if (!shouldReencode(fileName, contentType, buffer.byteLength, REENCODE_THRESHOLD)) {
-    return new File([buffer], fileName, { type: contentType || "audio/ogg" })
+async function prepareForTranscription(
+  buffer: Buffer,
+  fileName: string,
+  contentType: string,
+  engine: TranscriptionEngine,
+): Promise<PreparedAudio> {
+  const threshold = reencodeThresholdFor(engine)
+
+  if (!shouldReencode(fileName, contentType, buffer.byteLength, threshold)) {
+    return { bytes: buffer, fileName, mediaType: contentType || "audio/ogg" }
   }
 
   const opus = await reencodeToOpus(buffer, fileName)
 
-  if (opus.byteLength > GROQ_MAX_FILE_SIZE) {
+  if (opus.byteLength > engine.maxFileSize) {
     throw new PayloadTooLargeError(
-      `압축 후에도 파일 크기가 ${formatBytes(opus.byteLength)}로 Groq 무료 한도(${formatBytes(GROQ_MAX_FILE_SIZE)})를 초과합니다. ` +
+      `압축 후에도 파일 크기가 ${formatBytes(opus.byteLength)}로 ${engine.label} 한도(${formatBytes(engine.maxFileSize)})를 초과합니다. ` +
         `더 짧은 길이로 나눠서 업로드해 주세요. (긴 파일 자동 분할은 추후 지원 예정입니다.)`,
     )
   }
 
   const baseName = fileName.replace(/\.[^./\\]+$/, "")
-  return new File([opus], `${baseName}.opus`, { type: "audio/ogg" })
+  return { bytes: Buffer.from(opus), fileName: `${baseName}.opus`, mediaType: "audio/ogg" }
+}
+
+function getFormString(value: FormDataEntryValue | null): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 function appendTimestampOptions(form: FormData) {

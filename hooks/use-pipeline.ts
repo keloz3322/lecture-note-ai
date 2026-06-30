@@ -16,6 +16,11 @@ const STEP_ORDER: PipelineStep[] = ["prepare", "upload", "transcribe", "refine",
 // Set NEXT_PUBLIC_ENABLE_BLOB_UPLOAD="false" to force the legacy direct-upload path.
 const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false"
 
+export interface EngineSelection {
+  transcriptionEngine?: string
+  refineEngine?: string
+}
+
 export interface PipelineState {
   steps: Record<PipelineStep, StepStatus>
   activeStep: PipelineStep | null
@@ -64,6 +69,8 @@ export function usePipeline() {
   // Cache the last transcription so we can re-run refine when the user changes
   // the content type without re-uploading or re-transcribing.
   const lastTranscriptRef = useRef<TranscribeResult | null>(null)
+  // Remember the engines used for this run so changeContentType reuses them.
+  const lastRefineEngineRef = useRef<string | undefined>(undefined)
 
   const setStep = useCallback((step: PipelineStep, status: StepStatus) => {
     setState((prev) => ({
@@ -86,9 +93,10 @@ export function usePipeline() {
     })
   }, [])
 
-  const run = useCallback(async (file: File, _meta: AudioFileMeta) => {
+  const run = useCallback(async (file: File, _meta: AudioFileMeta, engines?: EngineSelection) => {
     abortRef.current = false
     lastTranscriptRef.current = null
+    lastRefineEngineRef.current = engines?.refineEngine
     setState({
       steps: initialSteps(),
       activeStep: null,
@@ -149,12 +157,14 @@ export function usePipeline() {
         if (useDirectFile || !uploaded) {
           const form = new FormData()
           form.append("file", file)
+          if (engines?.transcriptionEngine) form.append("engine", engines.transcriptionEngine)
           transcribed = await postForm<TranscribeResult>("/api/transcribe", form)
         } else {
           transcribed = await postJson<TranscribeResult>("/api/transcribe", {
             pathname: uploaded.pathname,
             audioUrl: uploaded.audioUrl,
             fileName: uploaded.fileName,
+            engine: engines?.transcriptionEngine,
           })
         }
       } catch (e) {
@@ -173,6 +183,7 @@ export function usePipeline() {
           segments: transcribed.segments,
           words: transcribed.words,
           durationSeconds: transcribed.durationSeconds,
+          engine: engines?.refineEngine,
         })
       } catch (e) {
         return fail("refine", toMessage(e, "교정/요약에 실패했습니다."))
@@ -202,6 +213,7 @@ export function usePipeline() {
         words: transcribed.words,
         durationSeconds: transcribed.durationSeconds,
         contentType,
+        engine: lastRefineEngineRef.current,
       })
       setState((prev) => ({ ...prev, result: refined, changingType: false }))
     } catch (e) {
