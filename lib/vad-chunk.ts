@@ -1,17 +1,14 @@
 import { spawn } from "node:child_process"
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises"
 import { existsSync } from "node:fs"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import ffmpegPath from "ffmpeg-static"
-import * as ort from "onnxruntime-node"
 import { getExtension } from "@/lib/format"
 
-// Silero VAD v5 runs on 16kHz mono audio in fixed 512-sample frames (32ms).
-const SAMPLE_RATE = 16000
-const FRAME_SAMPLES = 512
-const FRAME_BYTES = FRAME_SAMPLES * 4 // f32le
-const FRAME_SEC = FRAME_SAMPLES / SAMPLE_RATE // 0.032s
+// Lightweight serverless-friendly chunking. Avoid native ML runtimes here:
+// large native binaries can push the Vercel Function bundle over its size limit.
+const FRAME_SEC = 0.5
 
 export interface AudioChunk {
   index: number
@@ -19,28 +16,12 @@ export interface AudioChunk {
   endSec: number
 }
 
-// Cache the ONNX session across invocations on a warm function.
-let sessionPromise: Promise<ort.InferenceSession> | null = null
-
-function resolveModelPath(): string {
-  const candidates = [
-    join(process.cwd(), "models", "silero_vad.onnx"),
-    join(process.cwd(), ".next", "server", "models", "silero_vad.onnx"),
-  ]
-  return candidates.find((p) => existsSync(p)) ?? candidates[0]
+interface SilenceRange {
+  start: number
+  end: number
 }
 
-function getSession(): Promise<ort.InferenceSession> {
-  if (!sessionPromise) {
-    sessionPromise = ort.InferenceSession.create(resolveModelPath()).catch((err) => {
-      sessionPromise = null
-      throw err
-    })
-  }
-  return sessionPromise
-}
-
-/** Write the original media to a temp file once; reuse for probe/VAD/extract. */
+/** Write the original media to a temp file once; reuse for probe/splitting/extract. */
 export async function createInputFile(
   input: Buffer,
   sourceName: string,
@@ -55,104 +36,44 @@ export async function createInputFile(
 }
 
 /**
- * Decode the media to 16kHz mono PCM and run Silero VAD frame-by-frame, returning
- * the raw speech-probability score (0..1) per 32ms frame. We deliberately keep the
- * model's raw scores (no binarize threshold) so the chunker can locate the deepest
- * silence valleys rather than just speech/non-speech regions. The PCM is streamed
- * with backpressure so we never hold the whole decoded waveform in memory.
+ * Compute silence scores using ffmpeg's silencedetect filter.
+ * Scores are low during detected silence and high during speech/noise, which lets
+ * planChunks place boundaries near quiet regions without shipping a native ML runtime.
  */
-export async function computeVadScores(inputPath: string): Promise<Float32Array> {
-  if (!ffmpegPath) throw new Error("오디오 디코딩 도구(ffmpeg)를 찾을 수 없습니다.")
-  const session = await getSession()
+export async function computeSilenceScores(inputPath: string, totalDuration: number): Promise<Float32Array> {
+  if (!ffmpegPath) throw new Error("ffmpeg is not available for audio splitting.")
+  if (!existsSync(inputPath) || totalDuration <= 0) return new Float32Array([1])
 
-  const scores: number[] = []
-  let stateData = new Float32Array(2 * 1 * 128)
-  const srTensor = new ort.Tensor("int64", BigInt64Array.from([BigInt(SAMPLE_RATE)]), [])
-
-  const proc = spawn(ffmpegPath, [
+  const stderr = await captureFfmpegStderr(ffmpegPath, [
     "-hide_banner",
-    "-loglevel",
-    "error",
+    "-nostats",
     "-i",
     inputPath,
-    "-vn",
-    "-ac",
-    "1",
-    "-ar",
-    String(SAMPLE_RATE),
+    "-af",
+    "silencedetect=noise=-35dB:d=0.25",
     "-f",
-    "f32le",
+    "null",
     "-",
   ])
 
-  return new Promise<Float32Array>((resolve, reject) => {
-    let leftover = Buffer.alloc(0)
-    let chain: Promise<void> = Promise.resolve()
-    let stderr = ""
-    let failed = false
+  const frameCount = Math.max(1, Math.ceil(totalDuration / FRAME_SEC))
+  const scores = new Float32Array(frameCount)
+  scores.fill(1)
 
-    const fail = (err: Error) => {
-      if (failed) return
-      failed = true
-      proc.kill("SIGKILL")
-      reject(err)
-    }
+  for (const range of parseSilences(stderr, totalDuration)) {
+    const startFrame = clampFrame(frameCount, Math.floor(range.start / FRAME_SEC))
+    const endFrame = clampFrame(frameCount, Math.ceil(range.end / FRAME_SEC))
+    for (let i = startFrame; i <= endFrame; i++) scores[i] = 0
+  }
 
-    proc.stdout.on("data", (chunk: Buffer) => {
-      if (failed) return
-      proc.stdout.pause()
-      const buf = Buffer.concat([leftover, chunk])
-      const frameCount = Math.floor(buf.length / FRAME_BYTES)
-      const usableBytes = frameCount * FRAME_BYTES
-      // Copy into a fresh, 4-byte-aligned ArrayBuffer so we can view it as floats.
-      const aligned = buf.buffer.slice(buf.byteOffset, buf.byteOffset + usableBytes)
-      const samples = new Float32Array(aligned)
-      leftover = Buffer.from(buf.subarray(usableBytes))
-
-      chain = chain
-        .then(async () => {
-          for (let i = 0; i < frameCount; i++) {
-            const frame = samples.subarray(i * FRAME_SAMPLES, (i + 1) * FRAME_SAMPLES)
-            const out = await session.run({
-              input: new ort.Tensor("float32", frame, [1, FRAME_SAMPLES]),
-              state: new ort.Tensor("float32", stateData, [2, 1, 128]),
-              sr: srTensor,
-            })
-            scores.push(Number((out.output.data as Float32Array)[0]))
-            // Copy into a fresh array so we don't retain ONNX-managed memory.
-            stateData = Float32Array.from(out.stateN.data as ArrayLike<number>)
-          }
-        })
-        .then(() => {
-          if (!failed) proc.stdout.resume()
-        })
-        .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
-    })
-
-    proc.stderr.on("data", (c) => {
-      stderr += c.toString()
-    })
-    proc.on("error", (err) => fail(err))
-    proc.on("close", (code) => {
-      chain
-        .then(() => {
-          if (failed) return
-          if (code !== 0) {
-            fail(new Error(`오디오 디코딩에 실패했습니다. (ffmpeg exit ${code}) ${stderr.slice(0, 300)}`))
-            return
-          }
-          resolve(Float32Array.from(scores))
-        })
-        .catch((err) => fail(err instanceof Error ? err : new Error(String(err))))
-    })
-  })
+  return scores
 }
 
 /**
- * Plan chunk boundaries from raw VAD scores. Each chunk targets `targetSeconds`
- * and never exceeds `maxSeconds`. The cut is placed at the deepest silence valley
- * within a search window around the target, falling back to the relatively
- * quietest point when the audio is continuous speech (so we still cut sensibly).
+ * Plan chunk boundaries from silence scores. Each chunk targets `targetSeconds`
+ * and never exceeds `maxSeconds`. The cut is placed at the quietest point within
+ * a search window around the target, falling back to a near-target cut when the
+ * audio is continuous speech.
  */
 export function planChunks(
   scores: Float32Array,
@@ -163,15 +84,12 @@ export function planChunks(
   const chunks: AudioChunk[] = []
   if (totalDuration <= 0) return chunks
 
-  // Smooth over ~160ms (5 frames) so a single dip mid-word doesn't win over a
-  // sustained pause between sentences.
-  const smooth = smoothScores(scores, 5)
-  const SEARCH_RADIUS = 20 // seconds to look on each side of the target cut
-  const TIE_LAMBDA = 0.02 // per-second penalty so ties break toward the target
+  const smooth = smoothScores(scores, 3)
+  const searchRadius = 20
+  const tieLambda = 0.02
 
   let start = 0
   let index = 0
-  // Guard against pathological loops on near-silent or malformed score arrays.
   while (start < totalDuration - 0.05 && index < 10000) {
     const remaining = totalDuration - start
     if (remaining <= maxSeconds) {
@@ -180,16 +98,80 @@ export function planChunks(
     }
 
     const ideal = start + targetSeconds
-    const windowStart = Math.max(start + targetSeconds - SEARCH_RADIUS, start + 1)
-    const windowEnd = Math.min(start + maxSeconds, totalDuration, ideal + SEARCH_RADIUS)
-    const cut = findValley(smooth, windowStart, windowEnd, ideal, TIE_LAMBDA)
-    // Safety: ensure forward progress.
+    const windowStart = Math.max(start + targetSeconds - searchRadius, start + 1)
+    const windowEnd = Math.min(start + maxSeconds, totalDuration, ideal + searchRadius)
+    const cut = findValley(smooth, windowStart, windowEnd, ideal, tieLambda)
     const safeCut = cut > start + 0.5 ? cut : Math.min(start + maxSeconds, totalDuration)
     chunks.push({ index: index++, startSec: start, endSec: safeCut })
     start = safeCut
   }
 
   return chunks
+}
+
+/** Extract a [startSec, endSec) slice of the input and encode it to Opus (16kHz mono 32kbps). */
+export async function extractChunkOpus(inputPath: string, startSec: number, endSec: number): Promise<Buffer> {
+  if (!ffmpegPath) throw new Error("ffmpeg is not available for audio chunk encoding.")
+  const duration = Math.max(endSec - startSec, 0.1)
+  const dir = await mkdtemp(join(tmpdir(), "chunk-out-"))
+  const outputPath = join(dir, "chunk.opus")
+  try {
+    await runFfmpeg(ffmpegPath, [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-ss",
+      startSec.toFixed(3),
+      "-i",
+      inputPath,
+      "-t",
+      duration.toFixed(3),
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-c:a",
+      "libopus",
+      "-b:a",
+      "32k",
+      "-f",
+      "ogg",
+      outputPath,
+    ])
+    return await readFile(outputPath)
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+function parseSilences(stderr: string, totalDuration: number): SilenceRange[] {
+  const ranges: SilenceRange[] = []
+  let currentStart: number | null = null
+
+  for (const line of stderr.split(/\r?\n/)) {
+    const start = line.match(/silence_start:\s*([0-9.]+)/)
+    if (start) {
+      currentStart = Number.parseFloat(start[1])
+      continue
+    }
+
+    const end = line.match(/silence_end:\s*([0-9.]+)/)
+    if (end && currentStart != null) {
+      const parsedEnd = Number.parseFloat(end[1])
+      if (Number.isFinite(currentStart) && Number.isFinite(parsedEnd) && parsedEnd > currentStart) {
+        ranges.push({ start: currentStart, end: Math.min(parsedEnd, totalDuration) })
+      }
+      currentStart = null
+    }
+  }
+
+  if (currentStart != null && currentStart < totalDuration) {
+    ranges.push({ start: currentStart, end: totalDuration })
+  }
+
+  return ranges
 }
 
 function findValley(
@@ -233,46 +215,21 @@ function smoothScores(scores: Float32Array, win: number): Float32Array {
   return out
 }
 
-/** Extract a [startSec, endSec) slice of the input and encode it to Opus (16kHz mono 32kbps). */
-export async function extractChunkOpus(inputPath: string, startSec: number, endSec: number): Promise<Buffer> {
-  if (!ffmpegPath) throw new Error("오디오 인코딩 도구(ffmpeg)를 찾을 수 없습니다.")
-  const duration = Math.max(endSec - startSec, 0.1)
-  const dir = await mkdtemp(join(tmpdir(), "chunk-out-"))
-  const outputPath = join(dir, "chunk.opus")
-  try {
-    await runFfmpeg(ffmpegPath, [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-ss",
-      startSec.toFixed(3),
-      "-i",
-      inputPath,
-      "-t",
-      duration.toFixed(3),
-      "-vn",
-      "-ac",
-      "1",
-      "-ar",
-      String(SAMPLE_RATE),
-      "-c:a",
-      "libopus",
-      "-b:a",
-      "32k",
-      "-f",
-      "ogg",
-      outputPath,
-    ])
-    return await readFile(outputPath)
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
 function safeExtension(fileName: string): string {
   const ext = getExtension(fileName)
   return /^[a-z0-9]{1,5}$/.test(ext) ? `.${ext}` : ""
+}
+
+function captureFfmpegStderr(bin: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(bin, args)
+    let stderr = ""
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString()
+    })
+    proc.on("error", (err) => reject(err))
+    proc.on("close", () => resolve(stderr))
+  })
 }
 
 function runFfmpeg(bin: string, args: string[]): Promise<void> {
@@ -285,7 +242,7 @@ function runFfmpeg(bin: string, args: string[]): Promise<void> {
     proc.on("error", (err) => reject(err))
     proc.on("close", (code) => {
       if (code === 0) resolve()
-      else reject(new Error(`오디오 분할 인코딩에 실패했습니다. (ffmpeg exit ${code}) ${stderr.slice(0, 300)}`))
+      else reject(new Error(`Audio chunk encoding failed. (ffmpeg exit ${code}) ${stderr.slice(0, 300)}`))
     })
   })
 }

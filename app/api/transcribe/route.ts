@@ -12,7 +12,7 @@ import {
 } from "@/lib/types"
 import { getExtension, formatBytes } from "@/lib/format"
 import { reencodeToOpus, shouldReencode, probeDurationSeconds } from "@/lib/transcode"
-import { createInputFile, computeVadScores, planChunks, extractChunkOpus } from "@/lib/vad-chunk"
+import { createInputFile, computeSilenceScores, planChunks, extractChunkOpus } from "@/lib/vad-chunk"
 import { getChunkPlan, getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
 
 class PayloadTooLargeError extends Error {}
@@ -98,7 +98,7 @@ function validateDirectUpload(file: File) {
  * Decide between single-shot and chunked transcription, then route to the engine.
  * Files that fit under the engine's per-chunk ceiling (model length limit and/or
  * file-size limit) are transcribed in one request; longer files are split at silence
- * valleys via VAD and merged back with offset-corrected timestamps.
+ * valleys via ffmpeg silence detection and merged back with offset-corrected timestamps.
  */
 async function transcribeBuffer(
   buffer: Buffer,
@@ -128,7 +128,7 @@ async function transcribeOne(prepared: PreparedAudio, engine: TranscriptionEngin
 }
 
 /**
- * Split long media at VAD-detected silence valleys, transcribe each chunk, and
+ * Split long media at detected silence valleys, transcribe each chunk, and
  * merge the results. Each chunk's timestamps are shifted by the chunk's start
  * offset so the final timeline is continuous.
  */
@@ -141,7 +141,7 @@ async function transcribeChunked(
 ): Promise<TranscribeResult> {
   const { path, cleanup } = await createInputFile(buffer, fileName)
   try {
-    const scores = await computeVadScores(path)
+    const scores = await computeSilenceScores(path, duration)
     const chunks = planChunks(scores, duration, plan.targetSeconds, plan.maxSeconds)
     if (chunks.length === 0) throw new Error("오디오 분할 지점을 계산하지 못했습니다.")
 

@@ -33,8 +33,8 @@ export function NoteApp() {
 
   const start = useCallback(() => {
     if (!file || !meta) return
-    // Length limits are no longer a hard block: long files are split at silence
-    // valleys (VAD) and transcribed in chunks on the server.
+    // Length limits are no longer a hard block: long files are split near
+    // detected silence valleys and transcribed in chunks on the server.
     setValidationError(null)
     run(file, meta, { transcriptionEngine, refineEngine })
   }, [file, meta, run, transcriptionEngine, refineEngine])
