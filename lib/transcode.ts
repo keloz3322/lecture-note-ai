@@ -34,7 +34,7 @@ export async function reencodeToOpus(input: Buffer, sourceName: string): Promise
     throw new Error("오디오 인코딩 도구(ffmpeg)를 찾을 수 없습니다.")
   }
 
-  const dir = await mkdtemp(join(tmpdir(), "lecture-"))
+  const dir = await mkdtemp(join(tmpdir(), "transcript-"))
   const inputPath = join(dir, `input${safeExtension(sourceName)}`)
   const outputPath = join(dir, "output.opus")
 

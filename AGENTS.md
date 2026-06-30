@@ -1,15 +1,16 @@
-# Lecture Note AI Agent Notes
+# Transcript Studio Agent Notes
 
 ## Project
 - Local repo: `C:\Users\keloz\Documents\부트캠프\lecture-note-ai`
 - GitHub repo: `keloz3322/lecture-note-ai`
 - Vercel team: `2026DEUAI`
-- Vercel project: `lecture-note-ai`
-- Production URL: `https://lecture-note-ai-one.vercel.app`
+- Vercel project: `transcript-studio`
+- Production URL: `https://transcript-studio-2026deuai.vercel.app`
 
 ## Runtime
 - Next.js App Router project.
 - Main flow: browser upload -> `/api/transcribe` -> Groq Whisper -> `/api/refine` -> Gemini -> rendered notes.
+- Product direction: general-purpose audio/video transcript cleanup and note generation, not lecture-only.
 - Audio is not persisted in the current MVP. `NEXT_PUBLIC_ENABLE_BLOB_UPLOAD=false` keeps the direct upload path active.
 - Current demo file target is an Ogg Opus mono 16 kHz file below the direct upload limit.
 
@@ -35,4 +36,4 @@
 - Useful saved test data:
   - `C:\Users\keloz\Documents\부트캠프\lecture-note-ai-test-results\official-transcribe-response-32k.json`
   - `C:\Users\keloz\Documents\부트캠프\lecture-note-ai-test-16k-mono-32k.ogg`
-- For production verification, call `https://lecture-note-ai-one.vercel.app/api/refine` with the saved transcribe response and confirm repeated `200` responses.
+- For production verification, call `https://transcript-studio-2026deuai.vercel.app/api/refine` with the saved transcribe response and confirm repeated `200` responses.
