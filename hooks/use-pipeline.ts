@@ -22,6 +22,8 @@ export interface PipelineState {
   error: string | null
   result: RefineResult | null
   isRunning: boolean
+  /** True while re-running refine for a manually selected content type. */
+  changingType: boolean
 }
 
 function initialSteps(): Record<PipelineStep, StepStatus> {
@@ -56,8 +58,12 @@ export function usePipeline() {
     error: null,
     result: null,
     isRunning: false,
+    changingType: false,
   })
   const abortRef = useRef(false)
+  // Cache the last transcription so we can re-run refine when the user changes
+  // the content type without re-uploading or re-transcribing.
+  const lastTranscriptRef = useRef<TranscribeResult | null>(null)
 
   const setStep = useCallback((step: PipelineStep, status: StepStatus) => {
     setState((prev) => ({
@@ -69,12 +75,28 @@ export function usePipeline() {
 
   const reset = useCallback(() => {
     abortRef.current = true
-    setState({ steps: initialSteps(), activeStep: null, error: null, result: null, isRunning: false })
+    lastTranscriptRef.current = null
+    setState({
+      steps: initialSteps(),
+      activeStep: null,
+      error: null,
+      result: null,
+      isRunning: false,
+      changingType: false,
+    })
   }, [])
 
   const run = useCallback(async (file: File, _meta: AudioFileMeta) => {
     abortRef.current = false
-    setState({ steps: initialSteps(), activeStep: null, error: null, result: null, isRunning: true })
+    lastTranscriptRef.current = null
+    setState({
+      steps: initialSteps(),
+      activeStep: null,
+      error: null,
+      result: null,
+      isRunning: true,
+      changingType: false,
+    })
 
     const fail = (step: PipelineStep, message: string) => {
       setState((prev) => ({
@@ -139,6 +161,7 @@ export function usePipeline() {
         return fail("transcribe", toMessage(e, "전사에 실패했습니다."))
       }
       if (abortRef.current) return
+      lastTranscriptRef.current = transcribed
       setStep("transcribe", "complete")
 
       // 4. Refine / summarize (Gemini)
@@ -165,7 +188,32 @@ export function usePipeline() {
     }
   }, [setStep])
 
-  return { state, run, reset, stepOrder: STEP_ORDER }
+  // Re-run only the refine step with a user-selected content type, reusing the
+  // cached transcript (no re-upload / re-transcription).
+  const changeContentType = useCallback(async (contentType: string) => {
+    const transcribed = lastTranscriptRef.current
+    if (!transcribed) return
+
+    setState((prev) => ({ ...prev, changingType: true, error: null }))
+    try {
+      const refined = await postJson<RefineResult>("/api/refine", {
+        rawTranscript: transcribed.rawTranscript,
+        segments: transcribed.segments,
+        words: transcribed.words,
+        durationSeconds: transcribed.durationSeconds,
+        contentType,
+      })
+      setState((prev) => ({ ...prev, result: refined, changingType: false }))
+    } catch (e) {
+      setState((prev) => ({
+        ...prev,
+        changingType: false,
+        error: toMessage(e, "유형을 변경해 다시 생성하지 못했습니다."),
+      }))
+    }
+  }, [])
+
+  return { state, run, reset, changeContentType, stepOrder: STEP_ORDER }
 }
 
 function wait(ms: number) {

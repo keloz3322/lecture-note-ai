@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server"
-import type { RefineResult, TimelineItem, TranscriptSegment, TranscriptWord } from "@/lib/types"
+import type { RefineResult, RefineSection, TimelineItem, TranscriptSegment, TranscriptWord } from "@/lib/types"
+import {
+  CONTENT_TYPES,
+  DEFAULT_CONTENT_TYPE,
+  getContentType,
+  isContentTypeId,
+  type ContentTypeDef,
+  type ContentTypeId,
+} from "@/lib/content-types"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -8,9 +16,16 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
+const CONTENT_TYPE_IDS = CONTENT_TYPES.map((type) => type.id)
+
 const refineSchema = {
   type: "object",
   properties: {
+    detectedType: {
+      type: "string",
+      enum: CONTENT_TYPE_IDS,
+      description: "The content type that best fits this transcript.",
+    },
     cleanedTranscript: {
       type: "string",
       description: "The cleaned full transcript in Korean.",
@@ -21,7 +36,7 @@ const refineSchema = {
     },
     timeline: {
       type: "array",
-      description: "Chronological lecture sections based on the provided timestamps.",
+      description: "Chronological sections based on the provided timestamps.",
       items: {
         type: "object",
         properties: {
@@ -36,21 +51,24 @@ const refineSchema = {
     },
     keyPoints: {
       type: "array",
-      description: "Important study points.",
+      description: "Important points.",
       items: { type: "string" },
     },
-    studyQuestions: {
+    sections: {
       type: "array",
-      description: "Review questions.",
-      items: { type: "string" },
-    },
-    actionItems: {
-      type: "array",
-      description: "Follow-up action items.",
-      items: { type: "string" },
+      description: "Type-specific sections. Use exactly the section ids requested in the prompt.",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The requested section id." },
+          items: { type: "array", items: { type: "string" } },
+        },
+        required: ["id", "items"],
+        additionalProperties: false,
+      },
     },
   },
-  required: ["cleanedTranscript", "summary", "timeline", "keyPoints", "studyQuestions", "actionItems"],
+  required: ["detectedType", "cleanedTranscript", "summary", "timeline", "keyPoints", "sections"],
   additionalProperties: false,
 } as const
 
@@ -63,6 +81,7 @@ export async function POST(request: Request) {
       segments?: TranscriptSegment[]
       words?: TranscriptWord[]
       durationSeconds?: number
+      contentType?: string
     }
 
     if (!body.rawTranscript || body.rawTranscript.trim().length === 0) {
@@ -74,11 +93,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Gemini API 키가 서버에 설정되어 있지 않습니다." }, { status: 500 })
     }
 
+    // If the user explicitly chose a type, force it; otherwise let Gemini detect.
+    const overrideType = isContentTypeId(body.contentType) ? body.contentType : undefined
+
     const input = {
       rawTranscript: body.rawTranscript,
       segments: normalizeIncomingSegments(body.segments),
       words: normalizeIncomingWords(body.words),
       durationSeconds: typeof body.durationSeconds === "number" ? body.durationSeconds : undefined,
+      overrideType,
     }
     const result = await refineWithGemini(apiKey, input)
 
@@ -99,6 +122,7 @@ async function refineWithGemini(
     segments?: TranscriptSegment[]
     words?: TranscriptWord[]
     durationSeconds?: number
+    overrideType?: ContentTypeId
   },
 ): Promise<RefineResult> {
   const prompt = buildPrompt(input)
@@ -164,11 +188,13 @@ function buildPrompt({
   segments,
   words,
   durationSeconds,
+  overrideType,
 }: {
   rawTranscript: string
   segments?: TranscriptSegment[]
   words?: TranscriptWord[]
   durationSeconds?: number
+  overrideType?: ContentTypeId
 }) {
   const timedTranscript = buildTimedTranscript(segments, rawTranscript)
   const wordTimestamps = buildWordTimestamps(words)
@@ -177,11 +203,26 @@ function buildPrompt({
     : ""
   const durationHint = durationSeconds ? `\n전체 길이: ${formatTimestamp(durationSeconds)}` : ""
 
-  return `다음은 강의/발표 녹음에서 자동 전사한 원문입니다.
+  // The chosen type decides which sections to request and how to detect the type.
+  const chosen = overrideType ? getContentType(overrideType) : null
+  const typeInstruction = chosen
+    ? `이 콘텐츠는 "${chosen.label}" 유형으로 처리하세요. detectedType은 "${chosen.id}"로 설정하세요.\n${chosen.promptGuidance}`
+    : `먼저 전사문을 분석해 가장 잘 맞는 콘텐츠 유형 하나를 고르고 detectedType에 그 id를 쓰세요.\n${describeContentTypeChoices()}`
+
+  // Sections depend on the chosen type; if auto-detecting, ask for the union of
+  // common section ids so the output is useful regardless of detected type.
+  const sectionSpecs = chosen ? chosen.sections : unionSections()
+  const sectionInstruction = sectionSpecs
+    .map((spec) => `  - id "${spec.id}" (${spec.title}): ${spec.instruction}`)
+    .join("\n")
+
+  return `다음은 음성/영상에서 자동 전사한 원문입니다.
+
+${typeInstruction}
 
 반드시 한국어로 답하세요.
 반드시 JSON 객체 하나만 반환하세요. 설명문, 마크다운 코드펜스, 주석은 쓰지 마세요.
-JSON 키는 cleanedTranscript, summary, timeline, keyPoints, studyQuestions, actionItems만 사용하세요.
+JSON 키는 detectedType, cleanedTranscript, summary, timeline, keyPoints, sections만 사용하세요.
 
 작성 규칙:
 - 원문의 의미를 보존하면서 말더듬, 반복 표현, 불필요한 추임새를 자연스럽게 정리하세요.
@@ -189,10 +230,28 @@ JSON 키는 cleanedTranscript, summary, timeline, keyPoints, studyQuestions, act
 - timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
 - timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
 - 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.
-- summary는 4~7문장, keyPoints는 5~9개, studyQuestions는 4~7개, actionItems는 3~6개로 작성하세요.${durationHint}
+- summary는 4~7문장, keyPoints는 5~9개로 작성하세요.
+- sections 배열에는 아래에 명시된 id의 항목만 포함하세요. 각 항목은 { "id": ..., "items": [...] } 형식입니다. 해당 내용이 없으면 items를 빈 배열로 두세요.
+${sectionInstruction}${durationHint}
 
 타임스탬프 포함 전사:
 ${timedTranscript}${wordSection}`
+}
+
+/** Describe each type so Gemini can pick the best fit when auto-detecting. */
+function describeContentTypeChoices() {
+  return ["선택 가능한 유형:", ...CONTENT_TYPES.map((type) => `  - ${type.id}: ${type.description}`)].join("\n")
+}
+
+/** Union of all section specs, de-duplicated by id, for the auto-detect case. */
+function unionSections() {
+  const seen = new Map<string, ContentTypeDef["sections"][number]>()
+  for (const type of CONTENT_TYPES) {
+    for (const spec of type.sections) {
+      if (!seen.has(spec.id)) seen.set(spec.id, spec)
+    }
+  }
+  return [...seen.values()]
 }
 
 function extractGeminiOutputText(responseText: string) {
@@ -300,13 +359,21 @@ function normalizeRefineResult(
   input: {
     rawTranscript: string
     segments?: TranscriptSegment[]
+    overrideType?: ContentTypeId
   },
 ): RefineResult {
   const outer = asRecord(value)
   const record = asRecord(outer.result || outer.data || value)
   const timeline = normalizeTimeline(record.timeline)
 
+  // Detected type comes from Gemini; an explicit override always wins for contentType.
+  const detectedRaw = getText(record.detectedType)
+  const detectedType: ContentTypeId = isContentTypeId(detectedRaw) ? detectedRaw : DEFAULT_CONTENT_TYPE
+  const contentType: ContentTypeId = input.overrideType ?? detectedType
+
   return {
+    contentType,
+    detectedType,
     cleanedTranscript:
       getText(record.cleanedTranscript) ||
       getText(record.cleaned_transcript) ||
@@ -314,9 +381,33 @@ function normalizeRefineResult(
     summary: getText(record.summary) || "요약을 생성하지 못했습니다.",
     timeline: timeline.length ? timeline : buildFallbackTimeline(input.segments),
     keyPoints: toStringArray(record.keyPoints || record.key_points),
-    studyQuestions: toStringArray(record.studyQuestions || record.study_questions),
-    actionItems: toStringArray(record.actionItems || record.action_items),
+    sections: buildSections(contentType, record.sections),
   }
+}
+
+/**
+ * Map Gemini's raw section output onto the chosen type's section specs so the
+ * client always gets sections in the right order with correct titles/kinds,
+ * even if the model omitted or reordered some.
+ */
+function buildSections(contentType: ContentTypeId, raw: unknown): RefineSection[] {
+  const def = getContentType(contentType)
+  const byId = new Map<string, string[]>()
+
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      const rec = asRecord(entry)
+      const id = getText(rec.id)
+      if (id) byId.set(id, toStringArray(rec.items))
+    }
+  }
+
+  return def.sections.map((spec) => ({
+    id: spec.id,
+    title: spec.title,
+    kind: spec.kind,
+    items: byId.get(spec.id) ?? [],
+  }))
 }
 
 function normalizeTimeline(value: unknown): TimelineItem[] {

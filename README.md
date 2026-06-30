@@ -1,4 +1,6 @@
-# lecture-note-ai
+# Transcript Studio
+
+음성·영상(강의·회의·인터뷰·팟캐스트 등)을 업로드하면 전사하고 AI로 교정·요약해 콘텐츠 유형에 맞는 노트로 정리해주는 도구입니다.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
 

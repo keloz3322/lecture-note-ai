@@ -9,7 +9,7 @@ import { ResultsPanel } from "./results-panel"
 import { UploadPanel } from "./upload-panel"
 
 export function NoteApp() {
-  const { state, run, reset, stepOrder } = usePipeline()
+  const { state, run, reset, changeContentType, stepOrder } = usePipeline()
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<AudioFileMeta | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -47,8 +47,8 @@ export function NoteApp() {
               <AudioLines className="size-4.5" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold leading-none text-foreground">Lecture Note AI</h1>
-              <p className="mt-1 text-xs text-muted-foreground">강의 녹음을 학습 노트로 정리</p>
+              <h1 className="text-sm font-semibold leading-none text-foreground">Transcript Studio</h1>
+              <p className="mt-1 text-xs text-muted-foreground">음성·영상을 정리된 노트로</p>
             </div>
           </div>
           <span className="hidden items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
@@ -141,7 +141,12 @@ export function NoteApp() {
         {/* Right: results */}
         <section className="min-h-[420px]">
           {state.result && meta ? (
-            <ResultsPanel result={state.result} fileName={meta.name} />
+            <ResultsPanel
+              result={state.result}
+              fileName={meta.name}
+              onChangeType={changeContentType}
+              changingType={state.changingType}
+            />
           ) : (
             <EmptyState running={state.isRunning} />
           )}
@@ -162,8 +167,8 @@ function EmptyState({ running }: { running: boolean }) {
       </p>
       <p className="mt-1 max-w-xs text-xs text-muted-foreground">
         {running
-          ? "전사와 요약이 끝나면 여기에 학습 노트가 표시됩니다."
-          : "오디오 파일을 업로드하고 전사를 시작하면 정리된 노트가 여기에 표시됩니다."}
+          ? "전사와 요약이 끝나면 여기에 정리된 노트가 표시됩니다."
+          : "음성·영상 파일을 업로드하고 전사를 시작하면 정리된 노트가 여기에 표시됩니다."}
       </p>
     </div>
   )

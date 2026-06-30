@@ -23,10 +23,10 @@ export function getExtension(fileName: string): string {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ""
 }
 
-/** Build a full study-note Markdown document from the refined result. */
+/** Build a full note Markdown document from the refined result. */
 export function buildMarkdown(result: RefineResult, fileName: string): string {
   const lines: string[] = []
-  lines.push(`# ${fileName} — 학습 노트`)
+  lines.push(`# ${fileName} — 노트`)
   lines.push("")
   lines.push("## 요약")
   lines.push("")
@@ -44,14 +44,15 @@ export function buildMarkdown(result: RefineResult, fileName: string): string {
   lines.push("")
   for (const p of result.keyPoints) lines.push(`- ${p}`)
   lines.push("")
-  lines.push("## 복습 질문")
-  lines.push("")
-  result.studyQuestions.forEach((q, i) => lines.push(`${i + 1}. ${q}`))
-  lines.push("")
-  lines.push("## 할 일 / 액션 아이템")
-  lines.push("")
-  for (const a of result.actionItems) lines.push(`- [ ] ${a}`)
-  lines.push("")
+  for (const section of result.sections) {
+    if (section.items.length === 0) continue
+    lines.push(`## ${section.title}`)
+    lines.push("")
+    section.items.forEach((item, i) => {
+      lines.push(section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`)
+    })
+    lines.push("")
+  }
   lines.push("## 정리된 전사문")
   lines.push("")
   lines.push(result.cleanedTranscript)
@@ -59,10 +60,10 @@ export function buildMarkdown(result: RefineResult, fileName: string): string {
   return lines.join("\n")
 }
 
-/** Build a plain-text study note. */
+/** Build a plain-text note. */
 export function buildPlainText(result: RefineResult, fileName: string): string {
   const lines: string[] = []
-  lines.push(`${fileName} — 학습 노트`)
+  lines.push(`${fileName} — 노트`)
   lines.push("=".repeat(40))
   lines.push("")
   lines.push("[ 요약 ]")
@@ -78,12 +79,14 @@ export function buildPlainText(result: RefineResult, fileName: string): string {
   lines.push("[ 핵심 포인트 ]")
   result.keyPoints.forEach((p) => lines.push(`- ${p}`))
   lines.push("")
-  lines.push("[ 복습 질문 ]")
-  result.studyQuestions.forEach((q, i) => lines.push(`${i + 1}. ${q}`))
-  lines.push("")
-  lines.push("[ 할 일 / 액션 아이템 ]")
-  result.actionItems.forEach((a) => lines.push(`- ${a}`))
-  lines.push("")
+  for (const section of result.sections) {
+    if (section.items.length === 0) continue
+    lines.push(`[ ${section.title} ]`)
+    section.items.forEach((item, i) => {
+      lines.push(section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`)
+    })
+    lines.push("")
+  }
   lines.push("[ 정리된 전사문 ]")
   lines.push(result.cleanedTranscript)
   lines.push("")

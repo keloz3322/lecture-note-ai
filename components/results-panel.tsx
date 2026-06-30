@@ -1,28 +1,40 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CheckSquare, Clock3, Download, FileText, HelpCircle, ListChecks, ScrollText } from "lucide-react"
+import { CheckSquare, Clock3, Download, FileText, ListChecks, Quote, ScrollText, Sparkles } from "lucide-react"
 import { buildMarkdown, buildPlainText, downloadTextFile, formatDuration } from "@/lib/format"
-import type { RefineResult, TabKey } from "@/lib/types"
+import type { RefineResult, RefineSection, TabKey } from "@/lib/types"
+import { CONTENT_TYPES, getContentType, type ContentTypeId } from "@/lib/content-types"
 import { CopyButton } from "./copy-button"
 
 interface ResultsPanelProps {
   result: RefineResult
   fileName: string
+  /** Re-run refine with a manually chosen content type. */
+  onChangeType?: (type: ContentTypeId) => void
+  /** True while a type-change refine is in flight. */
+  changingType?: boolean
 }
 
-const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
+const CORE_TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
   { key: "timeline", label: "타임라인", icon: Clock3 },
   { key: "transcript", label: "정리된 전사문", icon: ScrollText },
   { key: "summary", label: "요약", icon: FileText },
   { key: "keyPoints", label: "핵심 포인트", icon: ListChecks },
-  { key: "questions", label: "복습 질문", icon: HelpCircle },
-  { key: "actions", label: "할 일", icon: CheckSquare },
 ]
 
-export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
-  const [tab, setTab] = useState<TabKey>("timeline")
+function sectionIcon(kind: RefineSection["kind"]) {
+  if (kind === "qa") return CheckSquare
+  if (kind === "text") return FileText
+  return Quote
+}
+
+export function ResultsPanel({ result, fileName, onChangeType, changingType }: ResultsPanelProps) {
+  const [tab, setTab] = useState<TabKey>("summary")
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
+
+  // Only show section tabs that actually have content.
+  const sectionTabs = useMemo(() => result.sections.filter((s) => s.items.length > 0), [result.sections])
 
   const tabText = useMemo(() => getTabText(result, tab), [result, tab])
 
@@ -30,7 +42,15 @@ export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
     <div className="flex h-full flex-col rounded-lg border border-border bg-card">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold text-card-foreground">학습 노트</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-card-foreground">노트</h2>
+          <TypeSelector
+            value={result.contentType}
+            detected={result.detectedType}
+            disabled={changingType}
+            onChange={onChangeType}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <CopyButton getText={() => tabText} label="탭 복사" />
           <button
@@ -54,23 +74,18 @@ export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
-        {TABS.map(({ key, label, icon: Icon }) => {
-          const active = tab === key
-          return (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(key)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </button>
-          )
-        })}
+        {CORE_TABS.map(({ key, label, icon: Icon }) => (
+          <TabButton key={key} active={tab === key} onClick={() => setTab(key)} icon={Icon} label={label} />
+        ))}
+        {sectionTabs.map((section) => (
+          <TabButton
+            key={section.id}
+            active={tab === section.id}
+            onClick={() => setTab(section.id)}
+            icon={sectionIcon(section.kind)}
+            label={section.title}
+          />
+        ))}
       </div>
 
       {/* Content */}
@@ -79,6 +94,78 @@ export function ResultsPanel({ result, fileName }: ResultsPanelProps) {
       </div>
     </div>
   )
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: typeof FileText
+  label: string
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  )
+}
+
+function TypeSelector({
+  value,
+  detected,
+  disabled,
+  onChange,
+}: {
+  value: ContentTypeId
+  detected: ContentTypeId
+  disabled?: boolean
+  onChange?: (type: ContentTypeId) => void
+}) {
+  if (!onChange) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+        <Sparkles className="size-3" />
+        {getContentType(value).label}
+      </span>
+    )
+  }
+  return (
+    <label className="inline-flex items-center gap-1.5">
+      <span className="sr-only">콘텐츠 유형</span>
+      <Sparkles className="size-3 text-muted-foreground" aria-hidden />
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as ContentTypeId)}
+        className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        title={value === detected ? "AI가 감지한 유형" : `AI 감지: ${getContentType(detected).label}`}
+      >
+        {CONTENT_TYPES.map((type) => (
+          <option key={type.id} value={type.id}>
+            {type.label}
+          </option>
+        ))}
+      </select>
+      {changingTypeIndicator(disabled)}
+    </label>
+  )
+}
+
+function changingTypeIndicator(disabled?: boolean) {
+  if (!disabled) return null
+  return <span className="text-xs text-muted-foreground">재생성 중…</span>
 }
 
 function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
@@ -126,26 +213,48 @@ function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
       </ul>
     )
   }
-  if (tab === "questions") {
+
+  // Dynamic, type-specific section.
+  const section = result.sections.find((s) => s.id === tab)
+  if (!section) {
+    return <p className="text-sm text-muted-foreground">표시할 내용이 없습니다.</p>
+  }
+  return <SectionContent section={section} />
+}
+
+function SectionContent({ section }: { section: RefineSection }) {
+  if (section.items.length === 0) {
+    return <p className="text-sm text-muted-foreground">{section.title} 항목이 없습니다.</p>
+  }
+  if (section.kind === "qa") {
     return (
       <ol className="space-y-3">
-        {result.studyQuestions.map((q, i) => (
+        {section.items.map((item, i) => (
           <li key={i} className="flex gap-3 text-sm leading-relaxed text-card-foreground">
             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium">
               {i + 1}
             </span>
-            <span>{q}</span>
+            <span>{item}</span>
           </li>
         ))}
       </ol>
     )
   }
+  if (section.kind === "text") {
+    return (
+      <div className="space-y-3 text-sm leading-relaxed text-card-foreground">
+        {section.items.map((item, i) => (
+          <p key={i}>{item}</p>
+        ))}
+      </div>
+    )
+  }
   return (
     <ul className="space-y-2">
-      {result.actionItems.map((a, i) => (
+      {section.items.map((item, i) => (
         <li key={i} className="flex items-start gap-2 text-sm leading-relaxed text-card-foreground">
           <CheckSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span>{a}</span>
+          <span>{item}</span>
         </li>
       ))}
     </ul>
@@ -164,9 +273,10 @@ function getTabText(result: RefineResult, tab: TabKey): string {
       return result.summary
     case "keyPoints":
       return result.keyPoints.map((p) => `- ${p}`).join("\n")
-    case "questions":
-      return result.studyQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")
-    case "actions":
-      return result.actionItems.map((a) => `- ${a}`).join("\n")
+    default: {
+      const section = result.sections.find((s) => s.id === tab)
+      if (!section) return ""
+      return section.items.map((item, i) => (section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`)).join("\n")
+    }
   }
 }

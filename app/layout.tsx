@@ -10,9 +10,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Lecture Note AI — 강의 녹음을 학습 노트로',
+  title: 'Transcript Studio — 음성·영상을 정리된 노트로',
   description:
-    '강의·회의 녹음 파일을 업로드하면 전사하고 AI로 교정·요약해 요약, 핵심 포인트, 복습 질문, 할 일까지 정리해주는 학습 노트 도구.',
+    '강의, 회의, 인터뷰, 팟캐스트 등 어떤 음성·영상이든 업로드하면 전사하고 AI로 교정·요약해 콘텐츠 유형에 맞는 노트로 정리해주는 도구.',
   generator: 'v0.app',
   icons: {
     icon: [

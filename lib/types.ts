@@ -1,5 +1,7 @@
-// Shared types for the Lecture Note AI pipeline.
+// Shared types for the Transcript Studio pipeline.
 // Kept in one place so connecting Groq / Gemini / Vercel Blob later is straightforward.
+
+import type { ContentTypeId } from "./content-types"
 
 // Audio + video containers. Video is accepted because the server extracts/compresses
 // the audio track with ffmpeg before sending it to Groq.
@@ -105,14 +107,30 @@ export interface TranscriptWord {
   end: number
 }
 
+/** A type-specific output section returned by Gemini. */
+export interface RefineSection {
+  /** Matches a SectionSpec.id from the content-type registry. */
+  id: string
+  /** Display label (mirrors the spec title). */
+  title: string
+  /** How to render/copy the items. */
+  kind: "list" | "qa" | "text"
+  /** Section content. For "text" kind, typically a single string. */
+  items: string[]
+}
+
 /** Response shape from /api/refine (Gemini) */
 export interface RefineResult {
+  /** The content type used to generate this result. */
+  contentType: ContentTypeId
+  /** The type Gemini detected from the transcript (may differ if user overrode it). */
+  detectedType: ContentTypeId
   cleanedTranscript: string
   summary: string
   timeline: TimelineItem[]
   keyPoints: string[]
-  studyQuestions: string[]
-  actionItems: string[]
+  /** Type-specific sections layered on top of the common core. */
+  sections: RefineSection[]
 }
 
 export interface TimelineItem {
@@ -122,7 +140,9 @@ export interface TimelineItem {
   summary: string
 }
 
-export type TabKey = "timeline" | "transcript" | "summary" | "keyPoints" | "questions" | "actions"
+/** Core tabs are always present; section tabs are keyed by their section id. */
+export type CoreTabKey = "timeline" | "transcript" | "summary" | "keyPoints"
+export type TabKey = CoreTabKey | string
 
 export interface ApiError {
   error: string
