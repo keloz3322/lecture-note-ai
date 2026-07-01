@@ -14,6 +14,12 @@ import type {
 } from "@/lib/types"
 
 const STEP_ORDER: PipelineStep[] = ["prepare", "upload", "transcribe", "refine", "done"]
+const DEMO_STEP_DELAYS_MS: Record<Exclude<PipelineStep, "done">, number> = {
+  prepare: 1200,
+  upload: 1400,
+  transcribe: 4200,
+  refine: 3000,
+}
 // Blob upload is the default path (it bypasses the ~4.5MB serverless body limit).
 // Set NEXT_PUBLIC_ENABLE_BLOB_UPLOAD="false" to force the legacy direct-upload path.
 const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false"
@@ -227,10 +233,10 @@ export function usePipeline() {
       return true
     }
 
-    if (!(await advance("prepare", 250))) return
-    if (!(await advance("upload", 300))) return
-    if (!(await advance("transcribe", 600))) return
-    if (!(await advance("refine", 650))) return
+    if (!(await advance("prepare", DEMO_STEP_DELAYS_MS.prepare))) return
+    if (!(await advance("upload", DEMO_STEP_DELAYS_MS.upload))) return
+    if (!(await advance("transcribe", DEMO_STEP_DELAYS_MS.transcribe))) return
+    if (!(await advance("refine", DEMO_STEP_DELAYS_MS.refine))) return
     if (abortRef.current) return
     setStep("done", "complete")
     setState((prev) => ({
