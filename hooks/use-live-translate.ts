@@ -66,9 +66,9 @@ interface LiveDemoData {
 }
 
 const LIVE_DEMO = liveDemoResult as LiveDemoData
-const LIVE_DEMO_START_DELAY_MS = 350
+const LIVE_DEMO_START_DELAY_MS = 3000
 const LIVE_DEMO_SECONDS_TO_MS = 900
-const LIVE_DEMO_REFINE_DELAY_MS = 900
+const LIVE_DEMO_REFINE_DELAY_MS = 4000
 
 export function useLiveTranslate() {
   const [status, setStatus] = useState<LiveStatus>("idle")
