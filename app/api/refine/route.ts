@@ -56,6 +56,7 @@ const GEMINI_THINKING_LEVEL = "medium"
 const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 const GATEWAY_GEMINI_TEMPERATURE = 1
 const DEFAULT_GATEWAY_TEMPERATURE = 0.1
+const GEMINI_SHORT_TRANSCRIPT_RETRY_LIMIT = 1
 
 const CONTENT_TYPE_IDS = CONTENT_TYPES.map((type) => type.id)
 
@@ -174,10 +175,24 @@ async function refineWithGateway(engine: RefineEngine, input: RefineInput): Prom
     const { object } = await generateObject({
       model: engine.modelId,
       schema: refineZodSchema,
-      prompt: buildPrompt(input),
+      prompt: buildPrompt(input, { preserveFullTranscript: isGeminiRefineEngine(engine) }),
       temperature: getGatewayTemperature(engine),
     })
-    return normalizeRefineResult(object, input)
+    const result = normalizeRefineResult(object, input)
+
+    const retryReason = geminiCleanedTranscriptRetryReason(result, input)
+    if (!isGeminiRefineEngine(engine) || !retryReason) {
+      return result
+    }
+
+    const retry = await generateObject({
+      model: engine.modelId,
+      schema: refineZodSchema,
+      prompt: buildPrompt(input, { preserveFullTranscript: true, cleanedTranscriptRetry: retryReason }),
+      temperature: getGatewayTemperature(engine),
+    })
+
+    return chooseBetterGeminiResult(result, normalizeRefineResult(retry.object, input), input)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`AI Gateway 교정/요약 실패 (${engine.modelId}): ${detail}`)
@@ -188,34 +203,54 @@ function getGatewayTemperature(engine: RefineEngine) {
   return engine.id === "gateway-gemini" ? GATEWAY_GEMINI_TEMPERATURE : DEFAULT_GATEWAY_TEMPERATURE
 }
 
+function isGeminiRefineEngine(engine: RefineEngine) {
+  return engine.id === "gateway-gemini" || engine.via === "gemini" || /gemini/i.test(engine.modelId)
+}
+
+function geminiCleanedTranscriptRetryReason(
+  result: RefineResult,
+  input: Pick<RefineInput, "rawTranscript">,
+): "short" | "long" | undefined {
+  const length = result.cleanedTranscript.length
+  if (length < minimumCleanedTranscriptChars(input.rawTranscript)) return "short"
+  if (length > maximumCleanedTranscriptChars(input.rawTranscript)) return "long"
+  return undefined
+}
+
+function chooseBetterGeminiResult(current: RefineResult, next: RefineResult, input: Pick<RefineInput, "rawTranscript">) {
+  return geminiCleanedTranscriptScore(next, input) > geminiCleanedTranscriptScore(current, input) ? next : current
+}
+
+function geminiCleanedTranscriptScore(result: RefineResult, input: Pick<RefineInput, "rawTranscript">) {
+  const rawLength = input.rawTranscript.trim().length
+  const length = result.cleanedTranscript.length
+  const min = minimumCleanedTranscriptChars(input.rawTranscript)
+  const max = maximumCleanedTranscriptChars(input.rawTranscript)
+  if (length < min) return length - min
+  if (length > max) return max - length
+  return rawLength - Math.abs(rawLength - length)
+}
+
+function minimumCleanedTranscriptChars(rawTranscript: string) {
+  const length = rawTranscript.trim().length
+  if (length <= 0) return 0
+  const ratio = length > 12_000 ? 0.55 : length > 6_000 ? 0.65 : 0.75
+  return Math.floor(length * ratio)
+}
+
+function maximumCleanedTranscriptChars(rawTranscript: string) {
+  const length = rawTranscript.trim().length
+  if (length <= 0) return 0
+  const ratio = length > 12_000 ? 0.9 : length > 6_000 ? 1.05 : 1.25
+  return Math.ceil(length * ratio)
+}
+
 async function refineWithGemini(apiKey: string, input: RefineInput): Promise<RefineResult> {
-  const prompt = buildPrompt(input)
+  const prompt = buildPrompt(input, { preserveFullTranscript: true })
   let lastError: Error | null = null
 
   for (const model of getGeminiModels()) {
-    const response = await fetch(`${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          thinkingConfig: {
-            thinkingLevel: GEMINI_THINKING_LEVEL,
-          },
-          responseMimeType: "application/json",
-          responseSchema: geminiResponseSchema,
-        },
-      }),
-    })
+    const response = await fetchGeminiGenerateContent(apiKey, model, prompt)
 
     const text = await response.text()
     if (!response.ok) {
@@ -227,7 +262,11 @@ async function refineWithGemini(apiKey: string, input: RefineInput): Promise<Ref
     try {
       const outputText = extractGeminiOutputText(text)
       const parsed = parseJsonObject(outputText)
-      return normalizeRefineResult(parsed, input)
+      const result = normalizeRefineResult(parsed, input)
+      const retryReason = geminiCleanedTranscriptRetryReason(result, input)
+      return retryReason
+        ? await retryGeminiForFullTranscript(apiKey, model, result, input, retryReason)
+        : result
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("Gemini가 JSON 형식 결과를 반환하지 못했습니다.")
       continue
@@ -235,6 +274,64 @@ async function refineWithGemini(apiKey: string, input: RefineInput): Promise<Ref
   }
 
   throw lastError ?? new Error("Gemini 교정/요약에 실패했습니다.")
+}
+
+async function retryGeminiForFullTranscript(
+  apiKey: string,
+  model: string,
+  firstResult: RefineResult,
+  input: RefineInput,
+  initialRetryReason: "short" | "long",
+): Promise<RefineResult> {
+  let best = firstResult
+  let retryReason: "short" | "long" | undefined = initialRetryReason
+
+  for (let attempt = 0; attempt < GEMINI_SHORT_TRANSCRIPT_RETRY_LIMIT; attempt++) {
+    const retryPrompt = buildPrompt(input, { preserveFullTranscript: true, cleanedTranscriptRetry: retryReason })
+    const response = await fetchGeminiGenerateContent(apiKey, model, retryPrompt)
+    const text = await response.text()
+
+    if (!response.ok) {
+      return best
+    }
+
+    try {
+      const parsed = parseJsonObject(extractGeminiOutputText(text))
+      best = chooseBetterGeminiResult(best, normalizeRefineResult(parsed, input), input)
+      retryReason = geminiCleanedTranscriptRetryReason(best, input)
+      if (!retryReason) return best
+    } catch {
+      return best
+    }
+  }
+
+  return best
+}
+
+function fetchGeminiGenerateContent(apiKey: string, model: string, prompt: string) {
+  return fetch(`${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        thinkingConfig: {
+          thinkingLevel: GEMINI_THINKING_LEVEL,
+        },
+        responseMimeType: "application/json",
+        responseSchema: geminiResponseSchema,
+      },
+    }),
+  })
 }
 
 function getGeminiModels() {
@@ -266,7 +363,7 @@ function buildPrompt({
   timestampStatus?: TimestampStatus
   transcriptionEngineLabel?: string
   overrideType?: ContentTypeId
-}) {
+}, options: { preserveFullTranscript?: boolean; cleanedTranscriptRetry?: "short" | "long" } = {}) {
   const timedTranscript = buildTimedTranscript(segments, rawTranscript)
   const hasTimestamps = timestampStatus === "available" && !!segments?.length
   const wordTimestamps = buildWordTimestamps(words)
@@ -296,6 +393,23 @@ function buildPrompt({
   const sectionInstruction = sectionSpecs
     .map((spec) => `  - id "${spec.id}" (${spec.title}): ${spec.instruction}`)
     .join("\n")
+  const transcriptPreservationRule = options.preserveFullTranscript
+    ? `\nGemini 전용 cleanedTranscript 품질 기준:
+- cleanedTranscript는 summary가 아니라 "전체 전사문을 읽기 좋게 교정한 풀 버전"입니다.
+- 원문에 나온 모델명, 도구명, 서비스명, 가격, 비교 기준, 장단점, 추천 결론을 빠뜨리지 마세요.
+- 문장을 자연스럽게 다듬고 문단을 나누되, 내용을 요약하거나 압축하지 마세요.
+- 원문에 없는 예의상 표현, 추가 해설, 배경 설명, 새로운 연결 문장을 넣어 길이를 늘리지 마세요.
+- cleanedTranscript는 원문 정보량을 대부분 보존해야 하며, 가능하면 원문 길이의 85~110%에 가깝게 작성하세요.
+- 이 입력의 cleanedTranscript는 최소 ${minimumCleanedTranscriptChars(rawTranscript).toLocaleString("ko-KR")}자 이상을 목표로 하세요.
+- 이 입력의 cleanedTranscript는 최대 ${maximumCleanedTranscriptChars(rawTranscript).toLocaleString("ko-KR")}자를 넘기지 마세요.
+- summary와 cleanedTranscript가 비슷해지면 실패입니다. summary는 짧게, cleanedTranscript는 길고 자세하게 작성하세요.`
+    : ""
+  const retryRule =
+    options.cleanedTranscriptRetry === "short"
+      ? `\n이전 응답의 cleanedTranscript가 너무 짧아 요약처럼 보였습니다. 이번에는 빠진 내용을 복원해 원문 흐름 전체를 따라가는 교정 전사문으로 다시 작성하세요.`
+      : options.cleanedTranscriptRetry === "long"
+        ? `\n이전 응답의 cleanedTranscript가 원문보다 지나치게 길어졌습니다. 새 설명을 덧붙이지 말고 원문 발화에 충실한 교정 전사문으로 다시 압축하세요.`
+        : ""
 
   return `다음은 음성/영상에서 자동 전사한 원문입니다.
 
@@ -307,11 +421,12 @@ JSON 키는 detectedType, cleanedTranscript, summary, timeline, keyPoints, secti
 
 작성 규칙:
 - 원문의 의미를 보존하면서 말더듬, 반복 표현, 불필요한 추임새를 자연스럽게 정리하세요.
+- cleanedTranscript에는 전사문 전체 흐름을 보존한 교정본을 넣고, summary에는 별도의 짧은 요약을 넣으세요.
 - 전사문에 없는 사실은 새로 만들지 마세요.
 ${timestampRule}
 - summary는 4~7문장, keyPoints는 5~9개로 작성하세요.
 - sections 배열에는 아래에 명시된 id의 항목만 포함하세요. 각 항목은 { "id": ..., "items": [...] } 형식입니다. 해당 내용이 없으면 items를 빈 배열로 두세요.
-${sectionInstruction}${durationHint}
+${sectionInstruction}${transcriptPreservationRule}${retryRule}${durationHint}
 
 ${transcriptHeading}:
 ${timedTranscript}${wordSection}`

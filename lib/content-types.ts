@@ -47,7 +47,7 @@ export const CONTENT_TYPES: ContentTypeDef[] = [
   {
     id: "lecture",
     label: "강의 / 수업",
-    description: "강의, 발표, 세미나 등 학습용 녹음",
+    description: "강의, 발표, 세미나, 튜토리얼, 설명형 교육 영상 등 학습용 녹음",
     promptGuidance:
       "학습자가 복습하기 좋도록 개념을 명확히 정리하고, 이해를 점검할 수 있는 노트로 작성하세요.",
     coreLabels: { timeline: "강의 흐름", keyPoints: "핵심 개념" },
@@ -87,7 +87,7 @@ export const CONTENT_TYPES: ContentTypeDef[] = [
   {
     id: "podcast",
     label: "팟캐스트 / 대담",
-    description: "팟캐스트, 토크, 영상 콘텐츠",
+    description: "팟캐스트, 토크, 여러 화자의 대담형 영상 콘텐츠",
     promptGuidance:
       "대화의 흐름과 흥미로운 지점을 살려 청취자가 핵심을 빠르게 파악하도록 정리하세요.",
     coreLabels: { timeline: "에피소드 흐름", keyPoints: "핵심 주제" },
