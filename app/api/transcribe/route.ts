@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { del, get } from "@vercel/blob"
-import { transcribe } from "ai"
-import { gateway } from "@ai-sdk/gateway"
+import { getVercelOidcToken } from "@vercel/oidc"
 import {
   DIRECT_UPLOAD_MAX_FILE_SIZE,
   SUPPORTED_EXTENSIONS,
@@ -27,6 +26,8 @@ export const runtime = "nodejs"
 export const maxDuration = 800
 
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+const AI_GATEWAY_TRANSCRIPTIONS_URL = "https://ai-gateway.vercel.sh/v4/ai/transcription-model"
+const AI_GATEWAY_PROTOCOL_VERSION = "0.0.1"
 
 /** Re-encode when within 1MB of the engine's hard limit. */
 function reencodeThresholdFor(engine: TranscriptionEngine) {
@@ -242,42 +243,86 @@ async function transcribeWithGateway(
   prepared: PreparedAudio,
   engine: TranscriptionEngine,
 ): Promise<TranscribeResult> {
-  try {
-    const result = await transcribe({
-      model: gateway.transcriptionModel(engine.modelId),
-      audio: new Uint8Array(prepared.bytes),
-      // Best-effort: ask Whisper for segment timestamps. Ignored by models that
-      // don't support them (e.g. gpt-4o-transcribe).
+  const auth = await getAiGatewayAuth()
+  const response = await requestGatewayTranscription(auth, prepared, engine)
+  if (!response.ok) throw new Error(`AI Gateway 전사 실패 (${engine.modelId}): ${response.errorText}`)
+
+  return normalizeGatewayResult(response.data)
+}
+
+async function getAiGatewayAuth(): Promise<{ token: string; authMethod: "api-key" | "oidc" }> {
+  const apiKey = process.env.AI_GATEWAY_API_KEY?.trim()
+  if (apiKey) return { token: apiKey, authMethod: "api-key" }
+
+  const oidcToken = (await getVercelOidcToken().catch(() => undefined)) || process.env.VERCEL_OIDC_TOKEN?.trim()
+  if (!oidcToken) {
+    throw new Error("AI Gateway 인증 토큰이 설정되어 있지 않습니다.")
+  }
+
+  return { token: oidcToken, authMethod: "oidc" }
+}
+
+async function requestGatewayTranscription(
+  auth: { token: string; authMethod: "api-key" | "oidc" },
+  prepared: PreparedAudio,
+  engine: TranscriptionEngine,
+): Promise<{ ok: true; data: unknown } | { ok: false; status: number; errorText: string }> {
+  const response = await fetch(AI_GATEWAY_TRANSCRIPTIONS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${auth.token}`,
+      "ai-gateway-protocol-version": AI_GATEWAY_PROTOCOL_VERSION,
+      "ai-gateway-auth-method": auth.authMethod,
+      "ai-model-id": engine.modelId,
+      "ai-transcription-model-specification-version": "4",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      audio: prepared.bytes.toString("base64"),
+      mediaType: prepared.mediaType || "audio/ogg",
       ...(engine.supportsTimestamps
         ? { providerOptions: { openai: { timestampGranularities: ["segment"] } } }
         : {}),
-    })
+    }),
+  })
 
-    const rawTranscript = result.text?.trim()
-    if (!rawTranscript) throw new Error("전사 결과가 비어 있습니다.")
+  const text = await response.text()
+  if (!response.ok) {
+    return { ok: false, status: response.status, errorText: extractErrorMessage(text) || text.slice(0, 240) }
+  }
 
-    return {
-      rawTranscript,
-      language: result.language || undefined,
-      durationSeconds: result.durationInSeconds || undefined,
-      segments: normalizeGatewaySegments(result.segments),
-      words: undefined,
-    }
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`AI Gateway 전사 실패 (${engine.modelId}): ${detail}`)
+  try {
+    return { ok: true, data: JSON.parse(text) }
+  } catch {
+    return { ok: true, data: { text } }
   }
 }
 
-function normalizeGatewaySegments(
-  segments: { text: string; startSecond: number; endSecond: number }[] | undefined,
-): TranscriptSegment[] | undefined {
-  if (!Array.isArray(segments) || segments.length === 0) return undefined
-  const mapped = segments
+function normalizeGatewayResult(data: unknown): TranscribeResult {
+  const object = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {}
+  const rawTranscript = getText(object.text)
+
+  if (!rawTranscript) {
+    throw new Error("AI Gateway 전사 결과가 비어 있습니다.")
+  }
+
+  return {
+    rawTranscript,
+    language: getText(object.language) || undefined,
+    durationSeconds: toNumber(object.durationInSeconds) ?? undefined,
+    segments: normalizeGatewaySegments(object.segments),
+    words: undefined,
+  }
+}
+
+function normalizeGatewaySegments(value: unknown): TranscriptSegment[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  const mapped = value
     .map((seg) => {
-      const start = toNumber(seg.startSecond)
-      const end = toNumber(seg.endSecond)
-      const text = getText(seg.text)
+      const record = typeof seg === "object" && seg !== null ? (seg as Record<string, unknown>) : {}
+      const start = toNumber(record.startSecond ?? record.start)
+      const end = toNumber(record.endSecond ?? record.end)
+      const text = getText(record.text)
       if (start == null || end == null || !text) return null
       return { start, end, text }
     })
