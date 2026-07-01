@@ -51,8 +51,9 @@ export const runtime = "nodejs"
 export const maxDuration = 300
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+const GEMINI_THINKING_LEVEL = "medium"
+const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
 const CONTENT_TYPE_IDS = CONTENT_TYPES.map((type) => type.id)
 
@@ -201,6 +202,9 @@ async function refineWithGemini(apiKey: string, input: RefineInput): Promise<Ref
         ],
         generationConfig: {
           temperature: 0.1,
+          thinkingConfig: {
+            thinkingLevel: GEMINI_THINKING_LEVEL,
+          },
           responseMimeType: "application/json",
           responseSchema: geminiResponseSchema,
         },
