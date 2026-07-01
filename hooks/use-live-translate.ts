@@ -1,0 +1,463 @@
+"use client"
+
+import { useCallback, useRef, useState } from "react"
+import type { ContentTypeId } from "@/lib/content-types"
+import { DEFAULT_REFINE_ENGINE } from "@/lib/engines"
+import {
+  LIVE_TRANSLATE_ENGINE_LABEL,
+  LIVE_TRANSLATE_MODEL,
+  type LiveTranslateLanguageCode,
+} from "@/lib/live-translate"
+import type { RefineResult } from "@/lib/types"
+
+type LiveStatus = "idle" | "connecting" | "listening" | "stopping" | "stopped" | "refining" | "error"
+type NoteSource = "source" | "translation" | "both"
+
+interface TokenResponse {
+  token: string
+  model: string
+  targetLanguageCode: LiveTranslateLanguageCode
+  echoTargetLanguage: boolean
+}
+
+interface TranscriptChunk {
+  id: string
+  text: string
+  languageCode?: string
+  receivedAtSeconds: number
+}
+
+interface AudioResources {
+  context: AudioContext
+  stream: MediaStream
+  source: MediaStreamAudioSourceNode
+  processor: ScriptProcessorNode
+  sink: GainNode
+}
+
+interface ServerMessage {
+  serverContent?: {
+    inputTranscription?: {
+      text?: string
+      languageCode?: string
+    }
+    outputTranscription?: {
+      text?: string
+      languageCode?: string
+    }
+    turnComplete?: boolean
+  }
+  usageMetadata?: {
+    totalTokenCount?: number
+  }
+}
+
+export function useLiveTranslate() {
+  const [status, setStatus] = useState<LiveStatus>("idle")
+  const [error, setError] = useState<string | null>(null)
+  const [sourceChunks, setSourceChunks] = useState<TranscriptChunk[]>([])
+  const [translationChunks, setTranslationChunks] = useState<TranscriptChunk[]>([])
+  const [result, setResult] = useState<RefineResult | null>(null)
+  const [changingType, setChangingType] = useState(false)
+  const [usageTokens, setUsageTokens] = useState<number | null>(null)
+  const [targetLanguageCode, setTargetLanguageCode] = useState<LiveTranslateLanguageCode>("ko")
+
+  const wsRef = useRef<WebSocket | null>(null)
+  const audioRef = useRef<AudioResources | null>(null)
+  const startedAtRef = useRef(0)
+  const chunkIdRef = useRef(0)
+  const sourceTextRef = useRef("")
+  const translationTextRef = useRef("")
+  const noteSourceRef = useRef<NoteSource>("translation")
+  const refineEngineRef = useRef<string>(DEFAULT_REFINE_ENGINE)
+
+  const appendChunk = useCallback((kind: "source" | "translation", text: string, languageCode?: string) => {
+    const normalized = normalizeTranscriptPiece(text)
+    if (!normalized) return
+
+    const chunk: TranscriptChunk = {
+      id: `${kind}-${++chunkIdRef.current}`,
+      text: normalized,
+      languageCode,
+      receivedAtSeconds: elapsedSeconds(startedAtRef.current),
+    }
+
+    if (kind === "source") {
+      sourceTextRef.current = joinTranscript(sourceTextRef.current, normalized)
+      setSourceChunks((prev) => [...prev, chunk])
+    } else {
+      translationTextRef.current = joinTranscript(translationTextRef.current, normalized)
+      setTranslationChunks((prev) => [...prev, chunk])
+    }
+  }, [])
+
+  const stop = useCallback(() => {
+    setStatus((prev) => (prev === "idle" || prev === "stopped" ? prev : "stopping"))
+    stopAudio(audioRef.current)
+    audioRef.current = null
+
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }))
+      window.setTimeout(() => ws.close(1000, "user stopped"), 350)
+    } else {
+      ws?.close()
+      setStatus("stopped")
+    }
+    wsRef.current = null
+  }, [])
+
+  const reset = useCallback(() => {
+    stopAudio(audioRef.current)
+    audioRef.current = null
+    wsRef.current?.close()
+    wsRef.current = null
+    sourceTextRef.current = ""
+    translationTextRef.current = ""
+    chunkIdRef.current = 0
+    setSourceChunks([])
+    setTranslationChunks([])
+    setResult(null)
+    setError(null)
+    setUsageTokens(null)
+    setStatus("idle")
+    setChangingType(false)
+  }, [])
+
+  const start = useCallback(
+    async (options: { targetLanguageCode: LiveTranslateLanguageCode; echoTargetLanguage: boolean }) => {
+      reset()
+      setStatus("connecting")
+      setTargetLanguageCode(options.targetLanguageCode)
+      startedAtRef.current = performance.now()
+
+      try {
+        const token = await createLiveToken(options.targetLanguageCode, options.echoTargetLanguage)
+        const ws = await openLiveSocket(token, options)
+        wsRef.current = ws
+        audioRef.current = await startMicrophoneStreaming((base64Audio) => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          ws.send(
+            JSON.stringify({
+              realtimeInput: {
+                audio: {
+                  data: base64Audio,
+                  mimeType: "audio/pcm;rate=16000",
+                },
+              },
+            }),
+          )
+        })
+        setStatus("listening")
+      } catch (e) {
+        stopAudio(audioRef.current)
+        audioRef.current = null
+        wsRef.current?.close()
+        wsRef.current = null
+        setError(toMessage(e, "실시간 번역 세션을 시작하지 못했습니다."))
+        setStatus("error")
+      }
+    },
+    [reset],
+  )
+
+  const buildNoteInput = useCallback((source: NoteSource) => {
+    const sourceText = sourceTextRef.current.trim()
+    const translationText = translationTextRef.current.trim()
+
+    if (source === "source") return sourceText
+    if (source === "translation") return translationText || sourceText
+    if (!sourceText) return translationText
+    if (!translationText) return sourceText
+
+    return [
+      "[원문 전사]",
+      sourceText,
+      "",
+      "[번역 전사]",
+      translationText,
+      "",
+      "위 원문과 번역문을 함께 참고해 내용 중심의 노트를 작성해 주세요.",
+    ].join("\n")
+  }, [])
+
+  const refine = useCallback(
+    async (source: NoteSource, refineEngine = DEFAULT_REFINE_ENGINE, contentType?: ContentTypeId) => {
+      const rawTranscript = buildNoteInput(source)
+      if (!rawTranscript.trim()) {
+        setError("노트로 정리할 실시간 전사 내용이 아직 없습니다.")
+        return
+      }
+
+      noteSourceRef.current = source
+      refineEngineRef.current = refineEngine
+      setStatus("refining")
+      setError(null)
+
+      try {
+        const refined = await postJson<RefineResult>("/api/refine", {
+          rawTranscript,
+          segments: [],
+          words: [],
+          timestampStatus: "unavailable",
+          transcriptionEngineLabel: LIVE_TRANSLATE_ENGINE_LABEL,
+          contentType,
+          engine: refineEngine,
+        })
+        setResult(refined)
+        setStatus("stopped")
+      } catch (e) {
+        setError(toMessage(e, "실시간 번역 내용을 노트로 정리하지 못했습니다."))
+        setStatus("error")
+      }
+    },
+    [buildNoteInput],
+  )
+
+  const changeContentType = useCallback(
+    async (contentType: ContentTypeId) => {
+      setChangingType(true)
+      try {
+        await refine(noteSourceRef.current, refineEngineRef.current, contentType)
+      } finally {
+        setChangingType(false)
+      }
+    },
+    [refine],
+  )
+
+  const attachSocketHandlers = useCallback(
+    (ws: WebSocket) => {
+      ws.onmessage = (event) => {
+        const message = parseServerMessage(event.data)
+        const content = message?.serverContent
+        if (content?.inputTranscription?.text) {
+          appendChunk("source", content.inputTranscription.text, content.inputTranscription.languageCode)
+        }
+        if (content?.outputTranscription?.text) {
+          appendChunk("translation", content.outputTranscription.text, content.outputTranscription.languageCode)
+        }
+        if (typeof message?.usageMetadata?.totalTokenCount === "number") {
+          setUsageTokens(message.usageMetadata.totalTokenCount)
+        }
+      }
+      ws.onerror = () => {
+        setError("Gemini Live 연결에서 오류가 발생했습니다.")
+        setStatus("error")
+      }
+      ws.onclose = () => {
+        stopAudio(audioRef.current)
+        audioRef.current = null
+        setStatus((prev) => (prev === "error" || prev === "refining" ? prev : "stopped"))
+      }
+    },
+    [appendChunk],
+  )
+
+  async function openLiveSocket(
+    token: TokenResponse,
+    options: { targetLanguageCode: LiveTranslateLanguageCode; echoTargetLanguage: boolean },
+  ) {
+    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(
+      token.token,
+    )}`
+    const ws = new WebSocket(wsUrl)
+    attachSocketHandlers(ws)
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("Gemini Live 연결 시간이 초과되었습니다.")), 10000)
+      ws.onopen = () => {
+        window.clearTimeout(timeout)
+        ws.send(
+          JSON.stringify({
+            setup: {
+              model: `models/${token.model || LIVE_TRANSLATE_MODEL}`,
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                translationConfig: {
+                  targetLanguageCode: options.targetLanguageCode,
+                  echoTargetLanguage: options.echoTargetLanguage,
+                },
+              },
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+            },
+          }),
+        )
+        resolve()
+      }
+      ws.onerror = () => {
+        window.clearTimeout(timeout)
+        reject(new Error("Gemini Live WebSocket 연결에 실패했습니다."))
+      }
+    })
+
+    attachSocketHandlers(ws)
+    return ws
+  }
+
+  return {
+    status,
+    error,
+    sourceChunks,
+    translationChunks,
+    result,
+    changingType,
+    usageTokens,
+    targetLanguageCode,
+    start,
+    stop,
+    reset,
+    refine,
+    changeContentType,
+    sourceText: sourceTextRef.current,
+    translationText: translationTextRef.current,
+  }
+}
+
+async function createLiveToken(targetLanguageCode: LiveTranslateLanguageCode, echoTargetLanguage: boolean) {
+  const res = await fetch("/api/live-translate/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targetLanguageCode, echoTargetLanguage }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || "Gemini Live 토큰 발급에 실패했습니다.")
+  return data as TokenResponse
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? "요청에 실패했습니다.")
+  return data as T
+}
+
+async function startMicrophoneStreaming(onChunk: (base64Audio: string) => void): Promise<AudioResources> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  })
+  const AudioContextClass = window.AudioContext || getWebkitAudioContext()
+  const context = new AudioContextClass()
+  await context.resume()
+
+  const source = context.createMediaStreamSource(stream)
+  const processor = context.createScriptProcessor(4096, 1, 1)
+  const sink = context.createGain()
+  sink.gain.value = 0
+
+  let pending: number[] = []
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0)
+    const pcm = downsampleToPcm16(input, context.sampleRate, 16000)
+    for (let i = 0; i < pcm.length; i++) pending.push(pcm[i])
+
+    while (pending.length >= 1600) {
+      const chunk = pending.slice(0, 1600)
+      pending = pending.slice(1600)
+      onChunk(pcm16ToBase64(chunk))
+    }
+  }
+
+  source.connect(processor)
+  processor.connect(sink)
+  sink.connect(context.destination)
+
+  return { context, stream, source, processor, sink }
+}
+
+function stopAudio(resources: AudioResources | null) {
+  if (!resources) return
+  resources.processor.disconnect()
+  resources.source.disconnect()
+  resources.sink.disconnect()
+  resources.stream.getTracks().forEach((track) => track.stop())
+  void resources.context.close().catch(() => undefined)
+}
+
+function downsampleToPcm16(input: Float32Array, inputRate: number, outputRate: number) {
+  if (outputRate === inputRate) return floatToPcm16(input)
+
+  const ratio = inputRate / outputRate
+  const outputLength = Math.floor(input.length / ratio)
+  const output = new Int16Array(outputLength)
+
+  for (let i = 0; i < outputLength; i++) {
+    const start = Math.floor(i * ratio)
+    const end = Math.min(Math.floor((i + 1) * ratio), input.length)
+    let sum = 0
+    for (let j = start; j < end; j++) sum += input[j]
+    output[i] = floatSampleToPcm16(sum / Math.max(end - start, 1))
+  }
+
+  return output
+}
+
+function floatToPcm16(input: Float32Array) {
+  const output = new Int16Array(input.length)
+  for (let i = 0; i < input.length; i++) output[i] = floatSampleToPcm16(input[i])
+  return output
+}
+
+function floatSampleToPcm16(sample: number) {
+  const clamped = Math.max(-1, Math.min(1, sample))
+  return clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff
+}
+
+function pcm16ToBase64(samples: number[]) {
+  const bytes = new Uint8Array(samples.length * 2)
+  const view = new DataView(bytes.buffer)
+  samples.forEach((sample, index) => view.setInt16(index * 2, sample, true))
+
+  let binary = ""
+  const batchSize = 0x8000
+  for (let i = 0; i < bytes.length; i += batchSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + batchSize))
+  }
+  return btoa(binary)
+}
+
+function parseServerMessage(data: unknown): ServerMessage | null {
+  if (typeof data !== "string") return null
+  try {
+    return JSON.parse(data) as ServerMessage
+  } catch {
+    return null
+  }
+}
+
+function normalizeTranscriptPiece(text: string) {
+  return text.replace(/\s+/g, " ").trim()
+}
+
+function joinTranscript(current: string, next: string) {
+  if (!current) return next
+  if (/[\s\n]$/.test(current)) return `${current}${next}`
+  if (/^[.,!?;:)\]}，。！？]/.test(next)) return `${current}${next}`
+  return `${current} ${next}`
+}
+
+function elapsedSeconds(startedAt: number) {
+  if (!startedAt) return 0
+  return Math.max(0, Math.round((performance.now() - startedAt) / 100) / 10)
+}
+
+function toMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message
+  return fallback
+}
+
+function getWebkitAudioContext() {
+  const win = window as Window & { webkitAudioContext?: typeof AudioContext }
+  if (!win.webkitAudioContext) throw new Error("이 브라우저는 Web Audio API를 지원하지 않습니다.")
+  return win.webkitAudioContext
+}
