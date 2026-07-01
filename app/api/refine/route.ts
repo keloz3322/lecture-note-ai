@@ -54,6 +54,8 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 const GEMINI_THINKING_LEVEL = "medium"
 const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+const GATEWAY_GEMINI_TEMPERATURE = 1
+const DEFAULT_GATEWAY_TEMPERATURE = 0.1
 
 const CONTENT_TYPE_IDS = CONTENT_TYPES.map((type) => type.id)
 
@@ -173,13 +175,17 @@ async function refineWithGateway(engine: RefineEngine, input: RefineInput): Prom
       model: engine.modelId,
       schema: refineZodSchema,
       prompt: buildPrompt(input),
-      temperature: 0.1,
+      temperature: getGatewayTemperature(engine),
     })
     return normalizeRefineResult(object, input)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`AI Gateway 교정/요약 실패 (${engine.modelId}): ${detail}`)
   }
+}
+
+function getGatewayTemperature(engine: RefineEngine) {
+  return engine.id === "gateway-gemini" ? GATEWAY_GEMINI_TEMPERATURE : DEFAULT_GATEWAY_TEMPERATURE
 }
 
 async function refineWithGemini(apiKey: string, input: RefineInput): Promise<RefineResult> {
