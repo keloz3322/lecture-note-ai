@@ -1,0 +1,1107 @@
+{
+  "title": "Ray Kurzweil MIT lecture live demo",
+  "description": "Gemini Live? ?? ??? ?? ?? ??? ??? ??, AI Gateway Gemini 3.5 Flash? ??? ??? ?? ?? ?????.",
+  "session": {
+    "generatedAt": "2026-07-01T09:34:53.126Z",
+    "model": "gemini-3.5-live-translate-preview",
+    "targetLanguageCode": "ko",
+    "echoTargetLanguage": true,
+    "sourceAudio": {
+      "originalFile": "Ray Kurzweil - MIT 2025 Robert A Muh Award Lecture.opus",
+      "startSeconds": 2303.42,
+      "endSeconds": 2390.22,
+      "durationSeconds": 86.8,
+      "clipFile": "kurzweil-live-demo-2303-2390.opus"
+    },
+    "usageTokens": 100,
+    "sourceChunks": [
+      {
+        "id": "source-1",
+        "text": "So I'll mention one area",
+        "languageCode": "en",
+        "receivedAtSeconds": 4.7
+      },
+      {
+        "id": "source-3",
+        "text": "one of the",
+        "languageCode": "en",
+        "receivedAtSeconds": 5.3
+      },
+      {
+        "id": "source-5",
+        "text": "biggest",
+        "languageCode": "en",
+        "receivedAtSeconds": 6.2
+      },
+      {
+        "id": "source-7",
+        "text": "transformations we're going to see",
+        "languageCode": "en",
+        "receivedAtSeconds": 7.5
+      },
+      {
+        "id": "source-9",
+        "text": "from AI in the",
+        "languageCode": "en",
+        "receivedAtSeconds": 8.6
+      },
+      {
+        "id": "source-11",
+        "text": "near term",
+        "languageCode": "en",
+        "receivedAtSeconds": 9.5
+      },
+      {
+        "id": "source-13",
+        "text": "is health",
+        "languageCode": "en",
+        "receivedAtSeconds": 10.6
+      },
+      {
+        "id": "source-15",
+        "text": "and medicine.",
+        "languageCode": "en",
+        "receivedAtSeconds": 11.6
+      },
+      {
+        "id": "source-17",
+        "text": "And",
+        "languageCode": "en",
+        "receivedAtSeconds": 12.6
+      },
+      {
+        "id": "source-19",
+        "text": "AI can now",
+        "languageCode": "en",
+        "receivedAtSeconds": 13.8
+      },
+      {
+        "id": "source-21",
+        "text": "simulate",
+        "languageCode": "en",
+        "receivedAtSeconds": 14.8
+      },
+      {
+        "id": "source-23",
+        "text": "billions of",
+        "languageCode": "en",
+        "receivedAtSeconds": 15.9
+      },
+      {
+        "id": "source-25",
+        "text": "molecules and",
+        "languageCode": "en",
+        "receivedAtSeconds": 17.1
+      },
+      {
+        "id": "source-27",
+        "text": "sort through them in record",
+        "languageCode": "en",
+        "receivedAtSeconds": 18.1
+      },
+      {
+        "id": "source-29",
+        "text": "time.",
+        "languageCode": "en",
+        "receivedAtSeconds": 19.1
+      },
+      {
+        "id": "source-31",
+        "text": "So for",
+        "languageCode": "en",
+        "receivedAtSeconds": 20.3
+      },
+      {
+        "id": "source-33",
+        "text": "example, at the very",
+        "languageCode": "en",
+        "receivedAtSeconds": 21.3
+      },
+      {
+        "id": "source-35",
+        "text": "start of the COVID",
+        "languageCode": "en",
+        "receivedAtSeconds": 22.4
+      },
+      {
+        "id": "source-37",
+        "text": "pandemic,",
+        "languageCode": "en",
+        "receivedAtSeconds": 23.5
+      },
+      {
+        "id": "source-39",
+        "text": "Moderna used",
+        "languageCode": "en",
+        "receivedAtSeconds": 24.5
+      },
+      {
+        "id": "source-41",
+        "text": "AI to",
+        "languageCode": "en",
+        "receivedAtSeconds": 25.7
+      },
+      {
+        "id": "source-43",
+        "text": "design and",
+        "languageCode": "en",
+        "receivedAtSeconds": 26.7
+      },
+      {
+        "id": "source-45",
+        "text": "optimize",
+        "languageCode": "en",
+        "receivedAtSeconds": 27.8
+      },
+      {
+        "id": "source-47",
+        "text": "mRNA",
+        "languageCode": "en",
+        "receivedAtSeconds": 28.9
+      },
+      {
+        "id": "source-49",
+        "text": "sequences",
+        "languageCode": "en",
+        "receivedAtSeconds": 30
+      },
+      {
+        "id": "source-51",
+        "text": "in just",
+        "languageCode": "en",
+        "receivedAtSeconds": 31.1
+      },
+      {
+        "id": "source-53",
+        "text": "two days they had the",
+        "languageCode": "en",
+        "receivedAtSeconds": 32.2
+      },
+      {
+        "id": "source-55",
+        "text": "formula for the",
+        "languageCode": "en",
+        "receivedAtSeconds": 33.3
+      },
+      {
+        "id": "source-57",
+        "text": "successful",
+        "languageCode": "en",
+        "receivedAtSeconds": 34.3
+      },
+      {
+        "id": "source-59",
+        "text": "vaccine.",
+        "languageCode": "en",
+        "receivedAtSeconds": 35.4
+      },
+      {
+        "id": "source-60",
+        "text": "Two days.",
+        "languageCode": "en",
+        "receivedAtSeconds": 36.5
+      },
+      {
+        "id": "source-62",
+        "text": "Uh",
+        "languageCode": "en",
+        "receivedAtSeconds": 37.6
+      },
+      {
+        "id": "source-64",
+        "text": "the pace was",
+        "languageCode": "en",
+        "receivedAtSeconds": 38.7
+      },
+      {
+        "id": "source-66",
+        "text": "stunning. It usually takes",
+        "languageCode": "en",
+        "receivedAtSeconds": 39.8
+      },
+      {
+        "id": "source-68",
+        "text": "five to 10",
+        "languageCode": "en",
+        "receivedAtSeconds": 40.9
+      },
+      {
+        "id": "source-70",
+        "text": "years.",
+        "languageCode": "en",
+        "receivedAtSeconds": 41.9
+      },
+      {
+        "id": "source-72",
+        "text": "Moderna also",
+        "languageCode": "en",
+        "receivedAtSeconds": 43
+      },
+      {
+        "id": "source-74",
+        "text": "relied on AI to",
+        "languageCode": "en",
+        "receivedAtSeconds": 44.1
+      },
+      {
+        "id": "source-76",
+        "text": "accelerate",
+        "languageCode": "en",
+        "receivedAtSeconds": 45.1
+      },
+      {
+        "id": "source-78",
+        "text": "manufacturing and",
+        "languageCode": "en",
+        "receivedAtSeconds": 46.1
+      },
+      {
+        "id": "source-80",
+        "text": "testing, which got this",
+        "languageCode": "en",
+        "receivedAtSeconds": 47.3
+      },
+      {
+        "id": "source-82",
+        "text": "out very quickly.",
+        "languageCode": "en",
+        "receivedAtSeconds": 48.4
+      },
+      {
+        "id": "source-85",
+        "text": "Going",
+        "languageCode": "en",
+        "receivedAtSeconds": 50.4
+      },
+      {
+        "id": "source-87",
+        "text": "forward, we'll use",
+        "languageCode": "en",
+        "receivedAtSeconds": 51.6
+      },
+      {
+        "id": "source-89",
+        "text": "biological",
+        "languageCode": "en",
+        "receivedAtSeconds": 52.6
+      },
+      {
+        "id": "source-91",
+        "text": "simulations",
+        "languageCode": "en",
+        "receivedAtSeconds": 53.7
+      },
+      {
+        "id": "source-93",
+        "text": "uh",
+        "languageCode": "en",
+        "receivedAtSeconds": 54.9
+      },
+      {
+        "id": "source-95",
+        "text": "to find cures",
+        "languageCode": "en",
+        "receivedAtSeconds": 56
+      },
+      {
+        "id": "source-97",
+        "text": "for all",
+        "languageCode": "en",
+        "receivedAtSeconds": 57
+      },
+      {
+        "id": "source-99",
+        "text": "diseases like",
+        "languageCode": "en",
+        "receivedAtSeconds": 58.2
+      },
+      {
+        "id": "source-101",
+        "text": "cancer,",
+        "languageCode": "en",
+        "receivedAtSeconds": 59.1
+      },
+      {
+        "id": "source-103",
+        "text": "Alzheimer's,",
+        "languageCode": "en",
+        "receivedAtSeconds": 60.4
+      },
+      {
+        "id": "source-105",
+        "text": "uh",
+        "languageCode": "en",
+        "receivedAtSeconds": 61.2
+      },
+      {
+        "id": "source-107",
+        "text": "and we'll replace",
+        "languageCode": "en",
+        "receivedAtSeconds": 62.4
+      },
+      {
+        "id": "source-109",
+        "text": "human trials",
+        "languageCode": "en",
+        "receivedAtSeconds": 63.5
+      },
+      {
+        "id": "source-111",
+        "text": "with",
+        "languageCode": "en",
+        "receivedAtSeconds": 64.5
+      },
+      {
+        "id": "source-113",
+        "text": "digital trials",
+        "languageCode": "en",
+        "receivedAtSeconds": 65.6
+      },
+      {
+        "id": "source-115",
+        "text": "so instead of",
+        "languageCode": "en",
+        "receivedAtSeconds": 66.7
+      },
+      {
+        "id": "source-117",
+        "text": "testing things on",
+        "languageCode": "en",
+        "receivedAtSeconds": 67.7
+      },
+      {
+        "id": "source-119",
+        "text": "humans, which take",
+        "languageCode": "en",
+        "receivedAtSeconds": 68.9
+      },
+      {
+        "id": "source-121",
+        "text": "years, we'll test",
+        "languageCode": "en",
+        "receivedAtSeconds": 70
+      },
+      {
+        "id": "source-123",
+        "text": "them",
+        "languageCode": "en",
+        "receivedAtSeconds": 71
+      },
+      {
+        "id": "source-125",
+        "text": "simulated",
+        "languageCode": "en",
+        "receivedAtSeconds": 72.1
+      },
+      {
+        "id": "source-127",
+        "text": "and we won't just",
+        "languageCode": "en",
+        "receivedAtSeconds": 73.2
+      },
+      {
+        "id": "source-129",
+        "text": "test them on like a",
+        "languageCode": "en",
+        "receivedAtSeconds": 74.3
+      },
+      {
+        "id": "source-131",
+        "text": "few hundred,",
+        "languageCode": "en",
+        "receivedAtSeconds": 75.7
+      },
+      {
+        "id": "source-133",
+        "text": "500 or maybe",
+        "languageCode": "en",
+        "receivedAtSeconds": 76.8
+      },
+      {
+        "id": "source-135",
+        "text": "a thousand,",
+        "languageCode": "en",
+        "receivedAtSeconds": 77.8
+      },
+      {
+        "id": "source-137",
+        "text": "different humans, we'll",
+        "languageCode": "en",
+        "receivedAtSeconds": 79
+      },
+      {
+        "id": "source-139",
+        "text": "test them on a",
+        "languageCode": "en",
+        "receivedAtSeconds": 80.1
+      },
+      {
+        "id": "source-141",
+        "text": "million and we'll do",
+        "languageCode": "en",
+        "receivedAtSeconds": 81.1
+      },
+      {
+        "id": "source-143",
+        "text": "that in a matter of",
+        "languageCode": "en",
+        "receivedAtSeconds": 82.3
+      },
+      {
+        "id": "source-145",
+        "text": "days.",
+        "languageCode": "en",
+        "receivedAtSeconds": 83.2
+      },
+      {
+        "id": "source-147",
+        "text": "Uh it'll be much",
+        "languageCode": "en",
+        "receivedAtSeconds": 84.3
+      },
+      {
+        "id": "source-149",
+        "text": "more accurate and a",
+        "languageCode": "en",
+        "receivedAtSeconds": 85.4
+      },
+      {
+        "id": "source-151",
+        "text": "thousand times",
+        "languageCode": "en",
+        "receivedAtSeconds": 86.5
+      },
+      {
+        "id": "source-153",
+        "text": "faster.",
+        "languageCode": "en",
+        "receivedAtSeconds": 87.5
+      },
+      {
+        "id": "source-155",
+        "text": "These incredible",
+        "languageCode": "en",
+        "receivedAtSeconds": 88.6
+      },
+      {
+        "id": "source-157",
+        "text": "breakthroughs",
+        "languageCode": "en",
+        "receivedAtSeconds": 89.7
+      },
+      {
+        "id": "source-159",
+        "text": "are going to lead to",
+        "languageCode": "en",
+        "receivedAtSeconds": 90.8
+      },
+      {
+        "id": "source-161",
+        "text": "what we",
+        "languageCode": "en",
+        "receivedAtSeconds": 91.9
+      },
+      {
+        "id": "source-163",
+        "text": "call",
+        "languageCode": "en",
+        "receivedAtSeconds": 93
+      },
+      {
+        "id": "source-165",
+        "text": "longevity",
+        "languageCode": "en",
+        "receivedAtSeconds": 94
+      },
+      {
+        "id": "source-167",
+        "text": "escape",
+        "languageCode": "en",
+        "receivedAtSeconds": 95.1
+      },
+      {
+        "id": "source-169",
+        "text": "velocity.",
+        "languageCode": "en",
+        "receivedAtSeconds": 96.2
+      }
+    ],
+    "translationChunks": [
+      {
+        "id": "translation-2",
+        "text": "그래서 한 가지",
+        "languageCode": "ko",
+        "receivedAtSeconds": 4.8
+      },
+      {
+        "id": "translation-4",
+        "text": "분야를 언급할게요.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 5.5
+      },
+      {
+        "id": "translation-6",
+        "text": "가장 큰",
+        "languageCode": "ko",
+        "receivedAtSeconds": 6.5
+      },
+      {
+        "id": "translation-8",
+        "text": "변화 중 하나는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 7.5
+      },
+      {
+        "id": "translation-10",
+        "text": "가까운 미래에",
+        "languageCode": "ko",
+        "receivedAtSeconds": 8.7
+      },
+      {
+        "id": "translation-12",
+        "text": "AI로부터",
+        "languageCode": "ko",
+        "receivedAtSeconds": 9.8
+      },
+      {
+        "id": "translation-14",
+        "text": "보게 될 건강과",
+        "languageCode": "ko",
+        "receivedAtSeconds": 10.8
+      },
+      {
+        "id": "translation-16",
+        "text": "의학입니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 12
+      },
+      {
+        "id": "translation-18",
+        "text": "그리고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 13
+      },
+      {
+        "id": "translation-20",
+        "text": "이제 AI는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 14.1
+      },
+      {
+        "id": "translation-22",
+        "text": "시뮬레이션할",
+        "languageCode": "ko",
+        "receivedAtSeconds": 15
+      },
+      {
+        "id": "translation-24",
+        "text": "수 있습니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 16.3
+      },
+      {
+        "id": "translation-26",
+        "text": "수십억 개의 분자를",
+        "languageCode": "ko",
+        "receivedAtSeconds": 17.2
+      },
+      {
+        "id": "translation-28",
+        "text": "분류하고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 18.2
+      },
+      {
+        "id": "translation-30",
+        "text": "기록적인 시간 안에",
+        "languageCode": "ko",
+        "receivedAtSeconds": 19.5
+      },
+      {
+        "id": "translation-32",
+        "text": "처리할 수 있습니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 20.5
+      },
+      {
+        "id": "translation-34",
+        "text": "예를 들어,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 21.5
+      },
+      {
+        "id": "translation-36",
+        "text": "코로나19 팬데믹",
+        "languageCode": "ko",
+        "receivedAtSeconds": 22.7
+      },
+      {
+        "id": "translation-38",
+        "text": "초기에는,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 23.7
+      },
+      {
+        "id": "translation-40",
+        "text": "모더나가",
+        "languageCode": "ko",
+        "receivedAtSeconds": 24.7
+      },
+      {
+        "id": "translation-42",
+        "text": "AI를 사용하여",
+        "languageCode": "ko",
+        "receivedAtSeconds": 26
+      },
+      {
+        "id": "translation-44",
+        "text": "설계하고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 27
+      },
+      {
+        "id": "translation-46",
+        "text": "최적화했습니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 28
+      },
+      {
+        "id": "translation-48",
+        "text": "mRNA",
+        "languageCode": "ko",
+        "receivedAtSeconds": 29.2
+      },
+      {
+        "id": "translation-50",
+        "text": "서열을요.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 30.2
+      },
+      {
+        "id": "translation-52",
+        "text": "단 2일",
+        "languageCode": "ko",
+        "receivedAtSeconds": 31.2
+      },
+      {
+        "id": "translation-54",
+        "text": "만에 그들은",
+        "languageCode": "ko",
+        "receivedAtSeconds": 32.6
+      },
+      {
+        "id": "translation-56",
+        "text": "백신 제조법을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 33.5
+      },
+      {
+        "id": "translation-58",
+        "text": "성공적으로 만들었습니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 34.5
+      },
+      {
+        "id": "translation-61",
+        "text": "이틀 만에.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 36.7
+      },
+      {
+        "id": "translation-63",
+        "text": "어,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 38
+      },
+      {
+        "id": "translation-65",
+        "text": "속도가 놀라웠죠.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 39
+      },
+      {
+        "id": "translation-67",
+        "text": "보통은",
+        "languageCode": "ko",
+        "receivedAtSeconds": 40
+      },
+      {
+        "id": "translation-69",
+        "text": "5년에서 10년이",
+        "languageCode": "ko",
+        "receivedAtSeconds": 41.2
+      },
+      {
+        "id": "translation-71",
+        "text": "걸리거든요.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 42.2
+      },
+      {
+        "id": "translation-73",
+        "text": "모더나는 또한",
+        "languageCode": "ko",
+        "receivedAtSeconds": 43.2
+      },
+      {
+        "id": "translation-75",
+        "text": "AI를 활용하여",
+        "languageCode": "ko",
+        "receivedAtSeconds": 44.2
+      },
+      {
+        "id": "translation-77",
+        "text": "제조 과정을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 45.2
+      },
+      {
+        "id": "translation-79",
+        "text": "가속화하고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 46.5
+      },
+      {
+        "id": "translation-81",
+        "text": "테스트하여 이",
+        "languageCode": "ko",
+        "receivedAtSeconds": 47.6
+      },
+      {
+        "id": "translation-83",
+        "text": "제품을 매우 빠르게",
+        "languageCode": "ko",
+        "receivedAtSeconds": 48.7
+      },
+      {
+        "id": "translation-84",
+        "text": "출시했습니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 49.5
+      },
+      {
+        "id": "translation-86",
+        "text": "앞으로",
+        "languageCode": "ko",
+        "receivedAtSeconds": 50.7
+      },
+      {
+        "id": "translation-88",
+        "text": "우리는 생물학적",
+        "languageCode": "ko",
+        "receivedAtSeconds": 51.7
+      },
+      {
+        "id": "translation-90",
+        "text": "시뮬레이션을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 53
+      },
+      {
+        "id": "translation-92",
+        "text": "사용하여",
+        "languageCode": "ko",
+        "receivedAtSeconds": 54
+      },
+      {
+        "id": "translation-94",
+        "text": "어,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 55
+      },
+      {
+        "id": "translation-96",
+        "text": "치료법을 찾을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 56.2
+      },
+      {
+        "id": "translation-98",
+        "text": "것입니다. 모든",
+        "languageCode": "ko",
+        "receivedAtSeconds": 57.2
+      },
+      {
+        "id": "translation-100",
+        "text": "질병에 대해,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 58.3
+      },
+      {
+        "id": "translation-102",
+        "text": "암, 알츠하이머",
+        "languageCode": "ko",
+        "receivedAtSeconds": 59.5
+      },
+      {
+        "id": "translation-104",
+        "text": "같은 것들요.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 60.5
+      },
+      {
+        "id": "translation-106",
+        "text": "어,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 61.5
+      },
+      {
+        "id": "translation-108",
+        "text": "그리고 우리는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 62.7
+      },
+      {
+        "id": "translation-110",
+        "text": "인간 임상 시험을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 63.7
+      },
+      {
+        "id": "translation-112",
+        "text": "디지털",
+        "languageCode": "ko",
+        "receivedAtSeconds": 64.7
+      },
+      {
+        "id": "translation-114",
+        "text": "임상 시험으로 대체할",
+        "languageCode": "ko",
+        "receivedAtSeconds": 65.7
+      },
+      {
+        "id": "translation-116",
+        "text": "것입니다. 그래서",
+        "languageCode": "ko",
+        "receivedAtSeconds": 67
+      },
+      {
+        "id": "translation-118",
+        "text": "사람을 대상으로",
+        "languageCode": "ko",
+        "receivedAtSeconds": 68
+      },
+      {
+        "id": "translation-120",
+        "text": "테스트하는 대신,",
+        "languageCode": "ko",
+        "receivedAtSeconds": 69
+      },
+      {
+        "id": "translation-122",
+        "text": "몇 년이 걸리는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 70.2
+      },
+      {
+        "id": "translation-124",
+        "text": "것을 시뮬레이션으로",
+        "languageCode": "ko",
+        "receivedAtSeconds": 71.2
+      },
+      {
+        "id": "translation-126",
+        "text": "테스트하고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 72.2
+      },
+      {
+        "id": "translation-128",
+        "text": "단순히",
+        "languageCode": "ko",
+        "receivedAtSeconds": 73.5
+      },
+      {
+        "id": "translation-130",
+        "text": "몇 명의 사람을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 74.5
+      },
+      {
+        "id": "translation-132",
+        "text": "대상으로 테스트하는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 76
+      },
+      {
+        "id": "translation-134",
+        "text": "것이 아니라 500명",
+        "languageCode": "ko",
+        "receivedAtSeconds": 77
+      },
+      {
+        "id": "translation-136",
+        "text": "혹은 천 명을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 78
+      },
+      {
+        "id": "translation-138",
+        "text": "대상으로 테스트하는",
+        "languageCode": "ko",
+        "receivedAtSeconds": 79.2
+      },
+      {
+        "id": "translation-140",
+        "text": "것이 아니라 백만",
+        "languageCode": "ko",
+        "receivedAtSeconds": 80.2
+      },
+      {
+        "id": "translation-142",
+        "text": "명을 대상으로 테스트할",
+        "languageCode": "ko",
+        "receivedAtSeconds": 81.5
+      },
+      {
+        "id": "translation-144",
+        "text": "것이고 며칠",
+        "languageCode": "ko",
+        "receivedAtSeconds": 82.6
+      },
+      {
+        "id": "translation-146",
+        "text": "만에 해낼 것입니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 83.5
+      },
+      {
+        "id": "translation-148",
+        "text": "훨씬",
+        "languageCode": "ko",
+        "receivedAtSeconds": 84.5
+      },
+      {
+        "id": "translation-150",
+        "text": "더 정확하고",
+        "languageCode": "ko",
+        "receivedAtSeconds": 85.7
+      },
+      {
+        "id": "translation-152",
+        "text": "천 배 더 빠를",
+        "languageCode": "ko",
+        "receivedAtSeconds": 86.8
+      },
+      {
+        "id": "translation-154",
+        "text": "것입니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 87.7
+      },
+      {
+        "id": "translation-156",
+        "text": "이 놀라운",
+        "languageCode": "ko",
+        "receivedAtSeconds": 89
+      },
+      {
+        "id": "translation-158",
+        "text": "돌파구들은",
+        "languageCode": "ko",
+        "receivedAtSeconds": 90
+      },
+      {
+        "id": "translation-160",
+        "text": "앞으로 우리가",
+        "languageCode": "ko",
+        "receivedAtSeconds": 91.2
+      },
+      {
+        "id": "translation-162",
+        "text": "부르는 것을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 92.2
+      },
+      {
+        "id": "translation-164",
+        "text": "이끌어낼 것입니다.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 93.3
+      },
+      {
+        "id": "translation-166",
+        "text": "장수와",
+        "languageCode": "ko",
+        "receivedAtSeconds": 94.2
+      },
+      {
+        "id": "translation-168",
+        "text": "탈출을",
+        "languageCode": "ko",
+        "receivedAtSeconds": 95.5
+      },
+      {
+        "id": "translation-170",
+        "text": "말이죠.",
+        "languageCode": "ko",
+        "receivedAtSeconds": 96.5
+      }
+    ],
+    "sourceText": "So I'll mention one area one of the biggest transformations we're going to see from AI in the near term is health and medicine. And AI can now simulate billions of molecules and sort through them in record time. So for example, at the very start of the COVID pandemic, Moderna used AI to design and optimize mRNA sequences in just two days they had the formula for the successful vaccine. Two days. Uh the pace was stunning. It usually takes five to 10 years. Moderna also relied on AI to accelerate manufacturing and testing, which got this out very quickly. Going forward, we'll use biological simulations uh to find cures for all diseases like cancer, Alzheimer's, uh and we'll replace human trials with digital trials so instead of testing things on humans, which take years, we'll test them simulated and we won't just test them on like a few hundred, 500 or maybe a thousand, different humans, we'll test them on a million and we'll do that in a matter of days. Uh it'll be much more accurate and a thousand times faster. These incredible breakthroughs are going to lead to what we call longevity escape velocity.",
+    "translationText": "그래서 한 가지 분야를 언급할게요. 가장 큰 변화 중 하나는 가까운 미래에 AI로부터 보게 될 건강과 의학입니다. 그리고 이제 AI는 시뮬레이션할 수 있습니다. 수십억 개의 분자를 분류하고 기록적인 시간 안에 처리할 수 있습니다. 예를 들어, 코로나19 팬데믹 초기에는, 모더나가 AI를 사용하여 설계하고 최적화했습니다. mRNA 서열을요. 단 2일 만에 그들은 백신 제조법을 성공적으로 만들었습니다. 이틀 만에. 어, 속도가 놀라웠죠. 보통은 5년에서 10년이 걸리거든요. 모더나는 또한 AI를 활용하여 제조 과정을 가속화하고 테스트하여 이 제품을 매우 빠르게 출시했습니다. 앞으로 우리는 생물학적 시뮬레이션을 사용하여 어, 치료법을 찾을 것입니다. 모든 질병에 대해, 암, 알츠하이머 같은 것들요. 어, 그리고 우리는 인간 임상 시험을 디지털 임상 시험으로 대체할 것입니다. 그래서 사람을 대상으로 테스트하는 대신, 몇 년이 걸리는 것을 시뮬레이션으로 테스트하고 단순히 몇 명의 사람을 대상으로 테스트하는 것이 아니라 500명 혹은 천 명을 대상으로 테스트하는 것이 아니라 백만 명을 대상으로 테스트할 것이고 며칠 만에 해낼 것입니다. 훨씬 더 정확하고 천 배 더 빠를 것입니다. 이 놀라운 돌파구들은 앞으로 우리가 부르는 것을 이끌어낼 것입니다. 장수와 탈출을 말이죠."
+  },
+  "result": {
+    "contentType": "lecture",
+    "detectedType": "lecture",
+    "timestampStatus": "estimated",
+    "timelineNotice": "Gemini 3.5 Live Translate의 타임라인은 모델 타임스탬프가 아니라 실시간 수신 시각 기반 추정값입니다.",
+    "cleanedTranscript": "가까운 미래에 AI로부터 보게 될 가장 큰 변화 중 하나는 건강과 의학 분야입니다. 이제 AI는 수십억 개의 분자를 시뮬레이션하고 분류하여 기록적인 시간 안에 처리할 수 있습니다. 예를 들어, 코로나19 팬데믹 초기에는 모더나가 AI를 사용하여 mRNA 서열을 설계하고 최적화했습니다. 단 이틀 만에 성공적으로 백신 제조법을 만들었는데, 보통 5년에서 10년이 걸리는 것을 감안하면 놀라운 속도입니다. 모더나는 또한 AI를 활용하여 제조 과정을 가속화하고 테스트하여 제품을 매우 빠르게 출시했습니다. 앞으로 우리는 생물학적 시뮬레이션을 통해 암, 알츠하이머와 같은 모든 질병의 치료법을 찾을 것입니다. 그리고 인간 임상 시험을 디지털 임상 시험으로 대체할 것입니다. 사람을 대상으로 몇 년 동안 테스트하는 대신, 시뮬레이션을 통해 500명이나 1000명이 아닌 100만 명을 대상으로 단 며칠 만에 테스트할 수 있게 됩니다. 이는 훨씬 더 정확하고 천 배나 빠를 것입니다. 이러한 놀라운 돌파구들은 앞으로 우리가 말하는 장수 탈출 속도를 이끌어낼 것입니다.",
+    "summary": "AI가 가까운 미래에 의학과 건강 분야에서 혁신적인 변화를 이끌어낼 것입니다. AI는 수십억 개의 분자를 빠르게 분류하고 시뮬레이션할 수 있어 백신 개발 기간을 획기적으로 단축합니다. 대표적인 예로 코로나19 팬데믹 당시 모더나가 AI를 활용해 단 이틀 만에 mRNA 백신 제조법을 완성한 바 있습니다. 향후에는 생물학적 시뮬레이션을 통해 암이나 알츠하이머 등의 질병 치료법을 찾게 될 것입니다. 나아가 수년이 걸리는 인간 임상 시험을 수백만 명 대상의 디지털 임상 시험으로 대체하여 기간을 단축하고 정확도를 높일 수 있습니다. 이러한 기술적 돌파구는 인류의 장수 시대를 앞당기는 결정적 계기가 될 것입니다.",
+    "timeline": [
+      {
+        "start": 3.5,
+        "end": 15.4,
+        "title": "AI와 미래 의학의 변화",
+        "summary": "AI가 의학과 건강 분야에 가져올 혁신과 초고속 분자 시뮬레이션 능력을 소개합니다."
+      },
+      {
+        "start": 16.1,
+        "end": 35.7,
+        "title": "모더나의 백신 개발 혁신 사례",
+        "summary": "코로나19 팬데믹 당시 모더나가 AI를 활용하여 단 이틀 만에 mRNA 백신 제조법을 완성한 혁신적 성과를 설명합니다."
+      },
+      {
+        "start": 35.7,
+        "end": 71.3,
+        "title": "질병 치료의 미래적 대안",
+        "summary": "생물학적 시뮬레이션을 사용하여 암이나 알츠하이머와 같은 중증 질병의 치료법을 발견할 전망을 공유합니다."
+      },
+      {
+        "start": 72,
+        "end": 90.2,
+        "title": "디지털 임상 시험의 도입",
+        "summary": "시간이 오래 걸리는 기존의 대인 임상 시험을 대체해, 가상으로 백만 명 규모를 수일 내에 테스트하는 디지털 임상 시험의 정밀성과 신속성을 설명합니다."
+      },
+      {
+        "start": 90.2,
+        "end": 96.5,
+        "title": "장수와 탈출의 시대",
+        "summary": "이러한 파괴적 의료 혁신이 결국 인류의 장수 시대로의 진입을 이끌 것임을 선언합니다."
+      }
+    ],
+    "keyPoints": [
+      "AI를 활용한 건강 및 의학 분야가 미래의 가장 큰 변화가 될 것입니다.",
+      "AI는 수십억 개의 분자를 신속하게 시뮬레이션하고 분류하는 처리가 가능합니다.",
+      "모더나는 AI로 mRNA 서열을 설계하여 단 이틀 만에 코로나19 백신 개발의 기틀을 마련했습니다.",
+      "수년이 걸리는 백신 설계 기간을 단 이틀로 단축한 것은 역사적인 속도 개선입니다.",
+      "앞으로 생물학적 시뮬레이션을 통해 암과 알츠하이머 등 난치병의 치료법을 찾을 수 있습니다.",
+      "수백 명 규모의 수년이 걸리던 인간 대상 임상 시험이 수백만 명 규모의 초고속 디지털 임상 시험으로 대체됩니다.",
+      "디지털 시험은 기존 방식보다 정밀도가 우수하며 속도 역시 천 배 가까이 신속해질 것입니다."
+    ],
+    "sections": [
+      {
+        "id": "studyQuestions",
+        "title": "복습 질문",
+        "kind": "qa",
+        "items": [
+          "AI가 수십억 개의 분자를 시뮬레이션할 수 있는 능력이 의학에 어떻게 기여하나요?",
+          "모더나가 코로나19 팬데믹 초기 백신 제조법을 설계하는 데 소요된 기간과 기존 방식의 차이는 무엇인가요?",
+          "미래의 생물학적 시뮬레이션 기술이 난치병 치료에 어떤 변화를 가져올까요?",
+          "디지털 임상 시험이 기존의 인간 대상 임상 시험과 비교해 가지는 장점들은 무엇인가요?",
+          "강연자가 언급한 '장수 탈출 속도'란 어떤 개념적 상태를 의미하나요?"
+        ]
+      }
+    ]
+  }
+}

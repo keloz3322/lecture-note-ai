@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangle, Languages, Loader2, Mic, RotateCcw, Square, Wand2 } from "lucide-react"
+import { AlertTriangle, Languages, Loader2, Mic, RotateCcw, Sparkles, Square, Wand2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { DEFAULT_REFINE_ENGINE, getRefineEngine, REFINE_ENGINES } from "@/lib/engines"
 import {
@@ -95,15 +95,26 @@ export function LiveTranslatePanel() {
 
           <div className="mt-4 flex gap-2">
             {!isActive ? (
-              <button
-                type="button"
-                onClick={() => live.start({ targetLanguageCode, echoTargetLanguage })}
-                disabled={isRefining}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Mic className="size-4" />
-                번역 시작
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={live.runDemo}
+                  disabled={isRefining}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="size-4" />
+                  데모 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => live.start({ targetLanguageCode, echoTargetLanguage })}
+                  disabled={isRefining}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Mic className="size-4" />
+                  번역 시작
+                </button>
+              </>
             ) : (
               <button
                 type="button"

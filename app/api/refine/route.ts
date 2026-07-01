@@ -561,6 +561,7 @@ function normalizeRefineResult(
   input: {
     rawTranscript: string
     segments?: TranscriptSegment[]
+    durationSeconds?: number
     timestampStatus?: TimestampStatus
     transcriptionEngineLabel?: string
     overrideType?: ContentTypeId
@@ -568,7 +569,10 @@ function normalizeRefineResult(
 ): RefineResult {
   const outer = asRecord(value)
   const record = asRecord(outer.result || outer.data || value)
-  const normalizedTimeline = normalizeTimeline(record.timeline)
+  const normalizedTimeline = fitTimelineToDuration(
+    normalizeTimeline(record.timeline),
+    getTimelineDurationLimit(input.durationSeconds, input.segments),
+  )
 
   // Detected type comes from Gemini; an explicit override always wins for contentType.
   const detectedRaw = getText(record.detectedType)
@@ -661,6 +665,38 @@ function normalizeTimeline(value: unknown): TimelineItem[] {
       return { start, end, title, summary }
     })
     .filter((item): item is TimelineItem => item !== null)
+}
+
+function getTimelineDurationLimit(durationSeconds: unknown, segments: TranscriptSegment[] | undefined) {
+  if (typeof durationSeconds === "number" && Number.isFinite(durationSeconds) && durationSeconds > 0) {
+    return durationSeconds
+  }
+  if (!segments?.length) return undefined
+  const finiteEnds = segments.map((segment) => segment.end).filter((end) => Number.isFinite(end))
+  return finiteEnds.length ? Math.max(...finiteEnds) : undefined
+}
+
+function fitTimelineToDuration(items: TimelineItem[], durationSeconds: number | undefined) {
+  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || items.length === 0) return items
+
+  const maxEnd = Math.max(...items.map((item) => item.end))
+  const scale = maxEnd > durationSeconds * 1.1 ? durationSeconds / maxEnd : 1
+
+  return items
+    .map((item) => {
+      const start = clampTimelineSecond(item.start * scale, durationSeconds)
+      const end = clampTimelineSecond(Math.max(start + 0.5, item.end * scale), durationSeconds)
+      return {
+        ...item,
+        start,
+        end,
+      }
+    })
+    .filter((item) => item.start < durationSeconds && item.end <= durationSeconds)
+}
+
+function clampTimelineSecond(value: number, durationSeconds: number) {
+  return Math.round(Math.min(durationSeconds, Math.max(0, value)) * 10) / 10
 }
 
 function buildFallbackTimeline(segments: TranscriptSegment[] | undefined): TimelineItem[] {

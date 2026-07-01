@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import type { ContentTypeId } from "@/lib/content-types"
 import { DEFAULT_REFINE_ENGINE } from "@/lib/engines"
+import liveDemoResult from "@/lib/live-demo-result.json"
 import {
   LIVE_TRANSLATE_ENGINE_LABEL,
   LIVE_TRANSLATE_MODEL,
@@ -12,6 +13,7 @@ import type { RefineResult, TranscriptSegment } from "@/lib/types"
 
 type LiveStatus = "idle" | "connecting" | "listening" | "stopping" | "stopped" | "refining" | "error"
 type NoteSource = "source" | "translation" | "both"
+type DemoTimer = number
 
 interface TokenResponse {
   token: string
@@ -53,6 +55,21 @@ interface ServerMessage {
   }
 }
 
+interface LiveDemoData {
+  session: {
+    targetLanguageCode: LiveTranslateLanguageCode
+    usageTokens: number | null
+    sourceChunks: TranscriptChunk[]
+    translationChunks: TranscriptChunk[]
+  }
+  result: RefineResult
+}
+
+const LIVE_DEMO = liveDemoResult as LiveDemoData
+const LIVE_DEMO_START_DELAY_MS = 350
+const LIVE_DEMO_SECONDS_TO_MS = 60
+const LIVE_DEMO_REFINE_DELAY_MS = 900
+
 export function useLiveTranslate() {
   const [status, setStatus] = useState<LiveStatus>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +88,16 @@ export function useLiveTranslate() {
   const translationTextRef = useRef("")
   const noteSourceRef = useRef<NoteSource>("translation")
   const refineEngineRef = useRef<string>(DEFAULT_REFINE_ENGINE)
+  const demoTimersRef = useRef<DemoTimer[]>([])
+  const demoRunIdRef = useRef(0)
+  const isDemoRef = useRef(false)
+
+  const clearDemoTimers = useCallback(() => {
+    demoTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    demoTimersRef.current = []
+    demoRunIdRef.current += 1
+    isDemoRef.current = false
+  }, [])
 
   const appendChunk = useCallback((kind: "source" | "translation", text: string, languageCode?: string) => {
     const normalized = normalizeTranscriptPiece(text)
@@ -93,6 +120,12 @@ export function useLiveTranslate() {
   }, [])
 
   const stop = useCallback(() => {
+    if (isDemoRef.current) {
+      clearDemoTimers()
+      setStatus("stopped")
+      return
+    }
+
     setStatus((prev) => (prev === "idle" || prev === "stopped" ? prev : "stopping"))
     stopAudio(audioRef.current)
     audioRef.current = null
@@ -106,9 +139,10 @@ export function useLiveTranslate() {
       setStatus("stopped")
     }
     wsRef.current = null
-  }, [])
+  }, [clearDemoTimers])
 
   const reset = useCallback(() => {
+    clearDemoTimers()
     stopAudio(audioRef.current)
     audioRef.current = null
     wsRef.current?.close()
@@ -123,7 +157,7 @@ export function useLiveTranslate() {
     setUsageTokens(null)
     setStatus("idle")
     setChangingType(false)
-  }, [])
+  }, [clearDemoTimers])
 
   const start = useCallback(
     async (options: { targetLanguageCode: LiveTranslateLanguageCode; echoTargetLanguage: boolean }) => {
@@ -216,6 +250,67 @@ export function useLiveTranslate() {
     },
     [buildNoteInput, sourceChunks, translationChunks],
   )
+
+  const runDemo = useCallback(() => {
+    reset()
+
+    const runId = demoRunIdRef.current
+    const demo = LIVE_DEMO
+    const events = [
+      ...demo.session.sourceChunks.map((chunk) => ({ kind: "source" as const, chunk })),
+      ...demo.session.translationChunks.map((chunk) => ({ kind: "translation" as const, chunk })),
+    ].sort((a, b) => a.chunk.receivedAtSeconds - b.chunk.receivedAtSeconds)
+    const firstSecond = events[0]?.chunk.receivedAtSeconds ?? 0
+    const lastDelay =
+      LIVE_DEMO_START_DELAY_MS +
+      Math.max(0, (events.at(-1)?.chunk.receivedAtSeconds ?? firstSecond) - firstSecond) * LIVE_DEMO_SECONDS_TO_MS
+
+    isDemoRef.current = true
+    noteSourceRef.current = "translation"
+    refineEngineRef.current = DEFAULT_REFINE_ENGINE
+    setTargetLanguageCode(demo.session.targetLanguageCode || "ko")
+    setStatus("connecting")
+    setError(null)
+    startedAtRef.current = performance.now()
+
+    const schedule = (delayMs: number, fn: () => void) => {
+      const timer = window.setTimeout(() => {
+        if (demoRunIdRef.current !== runId || !isDemoRef.current) return
+        fn()
+      }, delayMs)
+      demoTimersRef.current.push(timer)
+    }
+
+    schedule(LIVE_DEMO_START_DELAY_MS, () => setStatus("listening"))
+
+    events.forEach(({ kind, chunk }, index) => {
+      const delay =
+        LIVE_DEMO_START_DELAY_MS + Math.max(0, chunk.receivedAtSeconds - firstSecond) * LIVE_DEMO_SECONDS_TO_MS
+      schedule(delay, () => {
+        const demoChunk = { ...chunk, id: `${kind}-demo-${index}` }
+        const normalized = normalizeTranscriptPiece(demoChunk.text)
+        if (!normalized) return
+
+        if (kind === "source") {
+          sourceTextRef.current = joinTranscript(sourceTextRef.current, normalized)
+          setSourceChunks((prev) => [...prev, { ...demoChunk, text: normalized }])
+        } else {
+          translationTextRef.current = joinTranscript(translationTextRef.current, normalized)
+          setTranslationChunks((prev) => [...prev, { ...demoChunk, text: normalized }])
+        }
+      })
+    })
+
+    schedule(lastDelay + 300, () => {
+      setUsageTokens(demo.session.usageTokens)
+      setStatus("refining")
+    })
+    schedule(lastDelay + 300 + LIVE_DEMO_REFINE_DELAY_MS, () => {
+      setResult(demo.result)
+      setStatus("stopped")
+      isDemoRef.current = false
+    })
+  }, [reset])
 
   const changeContentType = useCallback(
     async (contentType: ContentTypeId) => {
@@ -316,6 +411,7 @@ export function useLiveTranslate() {
     start,
     stop,
     reset,
+    runDemo,
     refine,
     changeContentType,
     sourceText: sourceTextRef.current,
