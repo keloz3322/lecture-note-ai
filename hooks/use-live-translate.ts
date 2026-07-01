@@ -67,7 +67,7 @@ interface LiveDemoData {
 
 const LIVE_DEMO = liveDemoResult as LiveDemoData
 const LIVE_DEMO_START_DELAY_MS = 350
-const LIVE_DEMO_SECONDS_TO_MS = 60
+const LIVE_DEMO_SECONDS_TO_MS = 320
 const LIVE_DEMO_REFINE_DELAY_MS = 900
 
 export function useLiveTranslate() {
