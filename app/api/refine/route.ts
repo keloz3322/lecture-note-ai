@@ -365,14 +365,22 @@ function buildPrompt({
   overrideType?: ContentTypeId
 }, options: { preserveFullTranscript?: boolean; cleanedTranscriptRetry?: "short" | "long" } = {}) {
   const timedTranscript = buildTimedTranscript(segments, rawTranscript)
-  const hasTimestamps = timestampStatus === "available" && !!segments?.length
+  const hasTimestamps = (timestampStatus === "available" || timestampStatus === "estimated") && !!segments?.length
   const wordTimestamps = buildWordTimestamps(words)
   const wordSection = wordTimestamps
     ? `\n\n단어 단위 타임스탬프(필요할 때만 참고):\n${wordTimestamps}`
     : ""
   const durationHint = durationSeconds ? `\n전체 길이: ${formatTimestamp(durationSeconds)}` : ""
   const timestampRule = hasTimestamps
-    ? `- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
+    ? timestampStatus === "estimated"
+      ? `- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
+- 이 timestamp는 모델이 오디오에서 직접 반환한 값이 아니라 실시간 전사 수신 시각 기반 추정값입니다${
+          transcriptionEngineLabel ? ` (${transcriptionEngineLabel})` : ""
+        }.
+- timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
+- 정확한 자막 싱크처럼 과도하게 세밀하게 만들지 말고, 강의/회의 흐름을 대략적으로 찾는 용도로 작성하세요.
+- 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.`
+      : `- timestamp가 있는 구간 전사문을 보고 timeline을 시간 순서대로 작성하세요.
 - timeline은 4~8개 구간으로 묶고, start/end는 제공된 segment 시각을 근거로 초 단위 숫자로 쓰세요.
 - 단어 단위 timestamp는 segment 경계가 애매하거나 특정 단어 위치를 확인할 때만 참고하세요.`
     : `- 이 전사 결과에는 신뢰할 수 있는 timestamp가 없습니다${
@@ -568,7 +576,7 @@ function normalizeRefineResult(
   const contentType: ContentTypeId = input.overrideType ?? detectedType
   const timestampStatus = normalizeTimelineStatus(input.timestampStatus, input.segments)
   const timeline =
-    timestampStatus === "available"
+    timestampStatus === "available" || timestampStatus === "estimated"
       ? normalizedTimeline.length
         ? normalizedTimeline
         : buildFallbackTimeline(input.segments)
@@ -591,11 +599,14 @@ function normalizeRefineResult(
 }
 
 function normalizeTimestampStatus(value: unknown): TimestampStatus | undefined {
-  return value === "available" || value === "unsupported" || value === "unavailable" ? value : undefined
+  return value === "available" || value === "estimated" || value === "unsupported" || value === "unavailable"
+    ? value
+    : undefined
 }
 
 function normalizeTimelineStatus(status: TimestampStatus | undefined, segments: TranscriptSegment[] | undefined): TimestampStatus {
   if (status === "unsupported") return "unsupported"
+  if (status === "estimated" && segments?.length) return "estimated"
   if (status === "available" && segments?.length) return "available"
   if (segments?.length) return "available"
   return "unavailable"
@@ -603,6 +614,9 @@ function normalizeTimelineStatus(status: TimestampStatus | undefined, segments: 
 
 function timelineNotice(status: TimestampStatus, engineLabel?: string) {
   if (status === "available") return undefined
+  if (status === "estimated") {
+    return `${engineLabel || "선택한 전사 엔진"}의 타임라인은 모델 타임스탬프가 아니라 실시간 수신 시각 기반 추정값입니다.`
+  }
   if (status === "unsupported") {
     return `${engineLabel || "선택한 전사 엔진"}은 타임스탬프를 반환하지 않아 타임라인을 생성하지 않았습니다.`
   }

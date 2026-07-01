@@ -38,7 +38,7 @@ function sectionIcon(kind: RefineSection["kind"]) {
 export function ResultsPanel({ result, fileName, onChangeType, changingType }: ResultsPanelProps) {
   const [tab, setTab] = useState<TabKey>("summary")
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
-  const timelineAvailable = result.timestampStatus === "available"
+  const timelineAvailable = result.timestampStatus === "available" || result.timestampStatus === "estimated"
 
   const coreTabs = useMemo(() => buildCoreTabs(result.contentType, timelineAvailable), [result.contentType, timelineAvailable])
 
@@ -114,7 +114,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
         ))}
       </div>
 
-      {!timelineAvailable && result.timelineNotice && (
+      {result.timelineNotice && (
         <div className="flex items-start gap-2 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
           <Clock3 className="mt-0.5 size-3.5 shrink-0" />
           <span>{result.timelineNotice}</span>

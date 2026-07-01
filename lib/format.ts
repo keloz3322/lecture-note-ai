@@ -35,6 +35,10 @@ export function buildMarkdown(result: RefineResult, fileName: string): string {
   if (result.timeline.length > 0) {
     lines.push("## 타임라인")
     lines.push("")
+    if (result.timelineNotice) {
+      lines.push(`> ${result.timelineNotice}`)
+      lines.push("")
+    }
     for (const item of result.timeline) {
       lines.push(`- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
     }
@@ -76,6 +80,9 @@ export function buildPlainText(result: RefineResult, fileName: string): string {
   lines.push("")
   if (result.timeline.length > 0) {
     lines.push("[ 타임라인 ]")
+    if (result.timelineNotice) {
+      lines.push(result.timelineNotice)
+    }
     result.timeline.forEach((item) => {
       lines.push(`- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
     })

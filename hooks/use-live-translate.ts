@@ -8,7 +8,7 @@ import {
   LIVE_TRANSLATE_MODEL,
   type LiveTranslateLanguageCode,
 } from "@/lib/live-translate"
-import type { RefineResult } from "@/lib/types"
+import type { RefineResult, TranscriptSegment } from "@/lib/types"
 
 type LiveStatus = "idle" | "connecting" | "listening" | "stopping" | "stopped" | "refining" | "error"
 type NoteSource = "source" | "translation" | "both"
@@ -196,11 +196,13 @@ export function useLiveTranslate() {
       setError(null)
 
       try {
+        const segments = buildEstimatedSegments(source, sourceChunks, translationChunks)
         const refined = await postJson<RefineResult>("/api/refine", {
           rawTranscript,
-          segments: [],
+          segments,
           words: [],
-          timestampStatus: "unavailable",
+          durationSeconds: estimatedDurationSeconds(segments),
+          timestampStatus: segments.length > 0 ? "estimated" : "unavailable",
           transcriptionEngineLabel: LIVE_TRANSLATE_ENGINE_LABEL,
           contentType,
           engine: refineEngine,
@@ -212,7 +214,7 @@ export function useLiveTranslate() {
         setStatus("error")
       }
     },
-    [buildNoteInput],
+    [buildNoteInput, sourceChunks, translationChunks],
   )
 
   const changeContentType = useCallback(
@@ -459,6 +461,64 @@ function joinTranscript(current: string, next: string) {
   if (/[\s\n]$/.test(current)) return `${current}${next}`
   if (/^[.,!?;:)\]}，。！？]/.test(next)) return `${current}${next}`
   return `${current} ${next}`
+}
+
+function buildEstimatedSegments(
+  source: NoteSource,
+  sourceChunks: TranscriptChunk[],
+  translationChunks: TranscriptChunk[],
+): TranscriptSegment[] {
+  if (source === "source") return chunksToEstimatedSegments(sourceChunks)
+  if (source === "translation") {
+    return chunksToEstimatedSegments(translationChunks.length > 0 ? translationChunks : sourceChunks)
+  }
+
+  const merged = [
+    ...sourceChunks.map((chunk) => ({ ...chunk, text: `[원문] ${chunk.text}` })),
+    ...translationChunks.map((chunk) => ({ ...chunk, text: `[번역문] ${chunk.text}` })),
+  ].sort((a, b) => a.receivedAtSeconds - b.receivedAtSeconds)
+
+  return chunksToEstimatedSegments(merged)
+}
+
+function chunksToEstimatedSegments(chunks: TranscriptChunk[]): TranscriptSegment[] {
+  const normalized = chunks
+    .map((chunk) => ({
+      ...chunk,
+      text: normalizeTranscriptPiece(chunk.text),
+      receivedAtSeconds: Math.max(0, chunk.receivedAtSeconds),
+    }))
+    .filter((chunk) => chunk.text.length > 0)
+    .sort((a, b) => a.receivedAtSeconds - b.receivedAtSeconds)
+
+  return normalized.map((chunk, index) => {
+    const start = roundTime(chunk.receivedAtSeconds)
+    const next = normalized[index + 1]
+    const fallbackEnd = chunk.receivedAtSeconds + estimateChunkDuration(chunk.text)
+    const rawEnd = next ? next.receivedAtSeconds : fallbackEnd
+    const end = roundTime(Math.max(start + 0.5, rawEnd))
+
+    return {
+      id: index,
+      start,
+      end,
+      text: chunk.text,
+    }
+  })
+}
+
+function estimateChunkDuration(text: string) {
+  const compactLength = text.replace(/\s+/g, "").length
+  return Math.min(8, Math.max(1.2, compactLength / 5))
+}
+
+function estimatedDurationSeconds(segments: TranscriptSegment[]) {
+  if (segments.length === 0) return undefined
+  return Math.max(...segments.map((segment) => segment.end))
+}
+
+function roundTime(seconds: number) {
+  return Math.round(seconds * 10) / 10
 }
 
 function elapsedSeconds(startedAt: number) {
