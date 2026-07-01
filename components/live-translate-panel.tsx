@@ -1,7 +1,7 @@
 "use client"
 
-import { AlertTriangle, Languages, Mic, RotateCcw, Square, Wand2 } from "lucide-react"
-import { useState } from "react"
+import { AlertTriangle, Languages, Loader2, Mic, RotateCcw, Square, Wand2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { DEFAULT_REFINE_ENGINE, getRefineEngine, REFINE_ENGINES } from "@/lib/engines"
 import {
   getLiveTranslateLanguageLabel,
@@ -12,19 +12,43 @@ import { useLiveTranslate } from "@/hooks/use-live-translate"
 import { ResultsPanel } from "./results-panel"
 
 const SESSION_FILE_NAME = "실시간 번역 세션.txt"
+type NoteSource = "source" | "translation" | "both"
+
+const NOTE_SOURCE_LABELS: Record<NoteSource, string> = {
+  translation: "번역문 기준",
+  source: "원문 기준",
+  both: "원문 + 번역문",
+}
 
 export function LiveTranslatePanel() {
   const live = useLiveTranslate()
+  const noteSectionRef = useRef<HTMLDivElement>(null)
   const [targetLanguageCode, setTargetLanguageCode] = useState<LiveTranslateLanguageCode>("ko")
   const [echoTargetLanguage, setEchoTargetLanguage] = useState(true)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
+  const [pendingNoteSource, setPendingNoteSource] = useState<NoteSource | null>(null)
 
   const isActive = live.status === "connecting" || live.status === "listening" || live.status === "stopping"
+  const isRefining = live.status === "refining"
   const canRefine = !isActive && (live.sourceChunks.length > 0 || live.translationChunks.length > 0)
   const refine = getRefineEngine(refineEngine)
 
+  useEffect(() => {
+    if (live.result) noteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [live.result])
+
+  async function handleRefine(source: NoteSource) {
+    setPendingNoteSource(source)
+    noteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    try {
+      await live.refine(source, refineEngine)
+    } finally {
+      setPendingNoteSource(null)
+    }
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+    <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
       <aside className="flex flex-col gap-4">
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2">
@@ -74,7 +98,7 @@ export function LiveTranslatePanel() {
               </span>
               <select
                 value={refineEngine}
-                disabled={live.status === "refining"}
+                disabled={isRefining}
                 onChange={(event) => setRefineEngine(event.target.value)}
                 className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -93,7 +117,7 @@ export function LiveTranslatePanel() {
               <button
                 type="button"
                 onClick={() => live.start({ targetLanguageCode, echoTargetLanguage })}
-                disabled={live.status === "refining"}
+                disabled={isRefining}
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Mic className="size-4" />
@@ -112,7 +136,7 @@ export function LiveTranslatePanel() {
             <button
               type="button"
               onClick={live.reset}
-              disabled={isActive || live.status === "refining"}
+              disabled={isActive || isRefining}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="초기화"
             >
@@ -141,44 +165,56 @@ export function LiveTranslatePanel() {
           <div className="mt-3 grid gap-2">
             <button
               type="button"
-              disabled={!canRefine || live.status === "refining"}
-              onClick={() => live.refine("translation", refineEngine)}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canRefine || isRefining}
+              onClick={() => handleRefine("translation")}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              번역문 기준
+              {pendingNoteSource === "translation" && <Loader2 className="size-4 animate-spin" />}
+              {pendingNoteSource === "translation" ? "정리 중..." : "번역문 기준"}
             </button>
             <button
               type="button"
-              disabled={!canRefine || live.status === "refining"}
-              onClick={() => live.refine("source", refineEngine)}
-              className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canRefine || isRefining}
+              onClick={() => handleRefine("source")}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              원문 기준
+              {pendingNoteSource === "source" && <Loader2 className="size-4 animate-spin" />}
+              {pendingNoteSource === "source" ? "정리 중..." : "원문 기준"}
             </button>
             <button
               type="button"
-              disabled={!canRefine || live.status === "refining"}
-              onClick={() => live.refine("both", refineEngine)}
-              className="rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canRefine || isRefining}
+              onClick={() => handleRefine("both")}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              원문 + 번역문
+              {pendingNoteSource === "both" && <Loader2 className="size-4 animate-spin" />}
+              {pendingNoteSource === "both" ? "정리 중..." : "원문 + 번역문"}
             </button>
           </div>
+          {isRefining && (
+            <div
+              className="mt-3 flex items-start gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground"
+              aria-live="polite"
+            >
+              <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
+              <span>{pendingNoteSource ? `${NOTE_SOURCE_LABELS[pendingNoteSource]}으로 노트를 생성하고 있습니다.` : "노트를 생성하고 있습니다."}</span>
+            </div>
+          )}
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
             실시간 번역은 모델 타임스탬프를 반환하지 않으므로 노트 결과의 타임라인은 비활성화됩니다.
           </p>
         </section>
       </aside>
 
-      <section className="grid min-h-[560px] gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="flex min-h-[560px] flex-col rounded-lg border border-border bg-card">
+      <section className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-h-[430px] flex-col rounded-lg border border-border bg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold text-card-foreground">실시간 전사</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               수신 시각은 표시용이며 공식 타임라인으로 사용하지 않습니다.
             </p>
           </div>
-          <div className="grid flex-1 gap-0 md:grid-cols-2 xl:grid-cols-1">
+          <div className="grid flex-1 gap-0 lg:grid-cols-2">
             <TranscriptStream title="원문" chunks={live.sourceChunks} empty="마이크 입력이 들어오면 원문 전사가 표시됩니다." />
             <TranscriptStream
               title={`번역문 · ${getLiveTranslateLanguageLabel(targetLanguageCode)}`}
@@ -193,26 +229,41 @@ export function LiveTranslatePanel() {
           )}
         </div>
 
-        {live.result ? (
-          <ResultsPanel
-            result={live.result}
-            fileName={SESSION_FILE_NAME}
-            onChangeType={live.changeContentType}
-            changingType={live.changingType}
-          />
-        ) : (
-          <div className="flex min-h-[560px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 p-8 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-              <Wand2 className="size-6" />
+        <div ref={noteSectionRef} className="min-h-[680px] scroll-mt-24 [&>*]:min-h-[680px]">
+          {live.result ? (
+            <div className="relative">
+              {isRefining && (
+                <div
+                  className="absolute right-3 top-3 z-10 inline-flex items-center gap-2 rounded-md border border-primary/20 bg-card/95 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur"
+                  aria-live="polite"
+                >
+                  <Loader2 className="size-3.5 animate-spin text-primary" />
+                  새 노트 생성 중
+                </div>
+              )}
+              <ResultsPanel
+                result={live.result}
+                fileName={SESSION_FILE_NAME}
+                onChangeType={live.changeContentType}
+                changingType={live.changingType}
+              />
             </div>
-            <p className="mt-4 text-sm font-medium text-foreground">
-              {live.status === "refining" ? "노트를 생성하고 있습니다" : "아직 노트 결과가 없습니다"}
-            </p>
-            <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
-              실시간 번역을 종료한 뒤 전사 내용을 선택해 기존 노트 파이프라인으로 정리할 수 있습니다.
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="flex min-h-[680px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 p-8 text-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+                {isRefining ? <Loader2 className="size-6 animate-spin" /> : <Wand2 className="size-6" />}
+              </div>
+              <p className="mt-4 text-sm font-medium text-foreground">
+                {isRefining ? "노트를 생성하고 있습니다" : "아직 노트 결과가 없습니다"}
+              </p>
+              <p className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
+                {isRefining
+                  ? `${pendingNoteSource ? NOTE_SOURCE_LABELS[pendingNoteSource] : "선택한 전사 내용"}을 요약 엔진에 보내 정리하고 있습니다. 완료되면 이 영역에 넓게 표시됩니다.`
+                  : "실시간 번역을 종료한 뒤 전사 내용을 선택해 기존 노트 파이프라인으로 정리할 수 있습니다."}
+              </p>
+            </div>
+          )}
+        </div>
       </section>
     </div>
   )
@@ -256,10 +307,18 @@ function TranscriptStream({
   chunks: { id: string; text: string; languageCode?: string; receivedAtSeconds: number }[]
   empty: string
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+  }, [chunks.length])
+
   return (
-    <div className="min-h-0 border-b border-border p-4 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0 xl:border-b xl:border-r-0 xl:last:border-b-0">
+    <div className="flex min-h-0 flex-col border-b border-border p-4 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0">
       <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
-      <div className="mt-3 max-h-[220px] space-y-2 overflow-y-auto pr-1 xl:max-h-[205px]">
+      <div ref={scrollRef} className="mt-3 max-h-[330px] flex-1 space-y-2 overflow-y-auto pr-1">
         {chunks.length === 0 ? (
           <p className="text-sm leading-relaxed text-muted-foreground">{empty}</p>
         ) : (
