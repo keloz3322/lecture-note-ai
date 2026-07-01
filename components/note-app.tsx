@@ -21,7 +21,7 @@ type WorkflowMode = "file" | "live"
 
 export function NoteApp() {
   const { state, run, runDemo, reset, changeContentType, stepOrder } = usePipeline()
-  const [mode, setMode] = useState<WorkflowMode>("file")
+  const [mode, setMode] = useState<WorkflowMode>("live")
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<AudioFileMeta | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -111,16 +111,16 @@ export function NoteApp() {
       <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6">
         <div className="flex w-fit rounded-lg border border-border bg-card p-1" role="tablist" aria-label="작업 방식">
           <ModeButton
-            active={mode === "file"}
-            icon={<FileAudio className="size-4" />}
-            label="파일 분석"
-            onClick={() => setMode("file")}
-          />
-          <ModeButton
             active={mode === "live"}
             icon={<Languages className="size-4" />}
             label="실시간 번역·전사"
             onClick={() => setMode("live")}
+          />
+          <ModeButton
+            active={mode === "file"}
+            icon={<FileAudio className="size-4" />}
+            label="파일 분석"
+            onClick={() => setMode("file")}
           />
         </div>
 
