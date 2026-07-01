@@ -162,7 +162,7 @@ export function LiveTranslatePanel() {
                 녹음 파일 다운로드
               </a>
               <p className="mt-2 text-xs text-muted-foreground">
-                {live.recording.mimeType || "audio/webm"} · {formatBytes(live.recording.size)}
+                {formatRecordingType(live.recording.mimeType)} · {formatBytes(live.recording.size)}
               </p>
             </div>
           )}
@@ -397,4 +397,12 @@ function formatBytes(bytes: number) {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   const value = bytes / 1024 ** exponent
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
+}
+
+function formatRecordingType(mimeType: string) {
+  if (mimeType.includes("mp4")) return "M4A / AAC"
+  if (mimeType.includes("ogg")) return "OGG / Opus"
+  if (mimeType.includes("webm") && mimeType.includes("opus")) return "WebM / Opus"
+  if (mimeType.includes("webm")) return "WebM"
+  return mimeType || "Audio"
 }

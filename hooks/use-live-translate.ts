@@ -723,7 +723,13 @@ function elapsedSeconds(startedAt: number) {
 }
 
 function getRecordingMimeType() {
-  const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+  const preferredTypes = [
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+  ]
   return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) || ""
 }
 
