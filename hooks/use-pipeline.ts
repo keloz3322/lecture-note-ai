@@ -15,10 +15,10 @@ import type {
 
 const STEP_ORDER: PipelineStep[] = ["prepare", "upload", "transcribe", "refine", "done"]
 const DEMO_STEP_DELAYS_MS: Record<Exclude<PipelineStep, "done">, number> = {
-  prepare: 1200,
-  upload: 1400,
-  transcribe: 4200,
-  refine: 3000,
+  prepare: 1800,
+  upload: 2200,
+  transcribe: 6500,
+  refine: 4500,
 }
 // Blob upload is the default path (it bypasses the ~4.5MB serverless body limit).
 // Set NEXT_PUBLIC_ENABLE_BLOB_UPLOAD="false" to force the legacy direct-upload path.
