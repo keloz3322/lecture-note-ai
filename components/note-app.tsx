@@ -119,7 +119,7 @@ export function NoteApp() {
           <ModeButton
             active={mode === "live"}
             icon={<Languages className="size-4" />}
-            label="실시간 번역"
+            label="실시간 번역·전사"
             onClick={() => setMode("live")}
           />
         </div>
