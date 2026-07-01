@@ -1,0 +1,3 @@
+# V0 Sync Test
+
+sentinel: CODEX_V0_SYNC_A_20260701_165001
