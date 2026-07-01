@@ -27,6 +27,7 @@ export function LiveTranslatePanel() {
   const [echoTargetLanguage, setEchoTargetLanguage] = useState(true)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
   const [pendingNoteSource, setPendingNoteSource] = useState<NoteSource | null>(null)
+  const [autoScrollTranscript, setAutoScrollTranscript] = useState(true)
 
   const isActive = live.status === "connecting" || live.status === "listening" || live.status === "stopping"
   const isRefining = live.status === "refining"
@@ -90,26 +91,6 @@ export function LiveTranslatePanel() {
                 className="size-4 accent-primary"
               />
             </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                <Wand2 className="size-3.5 text-muted-foreground" />
-                노트 엔진
-              </span>
-              <select
-                value={refineEngine}
-                disabled={isRefining}
-                onChange={(event) => setRefineEngine(event.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {REFINE_ENGINES.map((engine) => (
-                  <option key={engine.id} value={engine.id}>
-                    {engine.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs leading-relaxed text-muted-foreground">{refine.description}</p>
-            </label>
           </div>
 
           <div className="mt-4 flex gap-2">
@@ -162,7 +143,26 @@ export function LiveTranslatePanel() {
 
         <section className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">노트로 정리</h2>
-          <div className="mt-3 grid gap-2">
+          <label className="mt-3 flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <Wand2 className="size-3.5 text-muted-foreground" />
+              노트 엔진
+            </span>
+            <select
+              value={refineEngine}
+              disabled={isRefining}
+              onChange={(event) => setRefineEngine(event.target.value)}
+              className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {REFINE_ENGINES.map((engine) => (
+                <option key={engine.id} value={engine.id}>
+                  {engine.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs leading-relaxed text-muted-foreground">{refine.description}</p>
+          </label>
+          <div className="mt-4 grid gap-2">
             <button
               type="button"
               disabled={!canRefine || isRefining}
@@ -201,25 +201,42 @@ export function LiveTranslatePanel() {
             </div>
           )}
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            실시간 번역은 모델 타임스탬프를 반환하지 않으므로 노트 결과의 타임라인은 비활성화됩니다.
+            실시간 번역 타임라인은 모델 타임스탬프가 아니라 수신 시각 기반 추정값으로 생성됩니다.
           </p>
         </section>
       </aside>
 
       <section className="flex min-w-0 flex-col gap-4">
         <div className="flex min-h-[430px] flex-col rounded-lg border border-border bg-card">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-card-foreground">실시간 전사</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              수신 시각은 표시용이며 공식 타임라인으로 사용하지 않습니다.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-card-foreground">실시간 전사</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                수신 시각은 표시용이며 노트에서는 추정 타임라인으로 사용됩니다.
+              </p>
+            </div>
+            <label className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={autoScrollTranscript}
+                onChange={(event) => setAutoScrollTranscript(event.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              자동 스크롤
+            </label>
           </div>
           <div className="grid flex-1 gap-0 lg:grid-cols-2">
-            <TranscriptStream title="원문" chunks={live.sourceChunks} empty="마이크 입력이 들어오면 원문 전사가 표시됩니다." />
+            <TranscriptStream
+              title="원문"
+              chunks={live.sourceChunks}
+              empty="마이크 입력이 들어오면 원문 전사가 표시됩니다."
+              autoScroll={autoScrollTranscript}
+            />
             <TranscriptStream
               title={`번역문 · ${getLiveTranslateLanguageLabel(targetLanguageCode)}`}
               chunks={live.translationChunks}
               empty="번역 결과가 도착하면 여기에 쌓입니다."
+              autoScroll={autoScrollTranscript}
             />
           </div>
           {live.usageTokens !== null && (
@@ -302,18 +319,21 @@ function TranscriptStream({
   title,
   chunks,
   empty,
+  autoScroll,
 }: {
   title: string
   chunks: { id: string; text: string; languageCode?: string; receivedAtSeconds: number }[]
   empty: string
+  autoScroll: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!autoScroll) return
     const el = scrollRef.current
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-  }, [chunks.length])
+  }, [autoScroll, chunks.length])
 
   return (
     <div className="flex min-h-0 flex-col border-b border-border p-4 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0">
