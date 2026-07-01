@@ -36,6 +36,7 @@ interface AudioResources {
 }
 
 interface ServerMessage {
+  setupComplete?: Record<string, never>
   serverContent?: {
     inputTranscription?: {
       text?: string
@@ -228,8 +229,8 @@ export function useLiveTranslate() {
 
   const attachSocketHandlers = useCallback(
     (ws: WebSocket) => {
-      ws.onmessage = (event) => {
-        const message = parseServerMessage(event.data)
+      ws.onmessage = async (event) => {
+        const message = await parseServerMessage(event.data)
         const content = message?.serverContent
         if (content?.inputTranscription?.text) {
           appendChunk("source", content.inputTranscription.text, content.inputTranscription.languageCode)
@@ -262,12 +263,11 @@ export function useLiveTranslate() {
       token.token,
     )}`
     const ws = new WebSocket(wsUrl)
-    attachSocketHandlers(ws)
+    ws.binaryType = "arraybuffer"
 
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(() => reject(new Error("Gemini Live 연결 시간이 초과되었습니다.")), 10000)
       ws.onopen = () => {
-        window.clearTimeout(timeout)
         ws.send(
           JSON.stringify({
             setup: {
@@ -284,7 +284,13 @@ export function useLiveTranslate() {
             },
           }),
         )
-        resolve()
+      }
+      ws.onmessage = async (event) => {
+        const message = await parseServerMessage(event.data)
+        if (message?.setupComplete) {
+          window.clearTimeout(timeout)
+          resolve()
+        }
       }
       ws.onerror = () => {
         window.clearTimeout(timeout)
@@ -426,13 +432,22 @@ function pcm16ToBase64(samples: number[]) {
   return btoa(binary)
 }
 
-function parseServerMessage(data: unknown): ServerMessage | null {
-  if (typeof data !== "string") return null
+async function parseServerMessage(data: unknown): Promise<ServerMessage | null> {
+  const text = await websocketMessageToText(data)
+  if (!text) return null
   try {
-    return JSON.parse(data) as ServerMessage
+    return JSON.parse(text) as ServerMessage
   } catch {
     return null
   }
+}
+
+async function websocketMessageToText(data: unknown): Promise<string | null> {
+  if (typeof data === "string") return data
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data)
+  if (data instanceof Blob) return data.text()
+  if (data instanceof Uint8Array) return new TextDecoder().decode(data)
+  return null
 }
 
 function normalizeTranscriptPiece(text: string) {
