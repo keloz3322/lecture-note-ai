@@ -238,6 +238,7 @@ export function usePipeline() {
       result: getDemoResult({
         timestampStatus: demoTimestampStatus,
         transcriptionEngineLabel: transcription.label,
+        refineEngine: engines?.refineEngine,
       }),
       isRunning: false,
       activeStep: "done",
