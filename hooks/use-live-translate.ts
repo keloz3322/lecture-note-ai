@@ -15,6 +15,13 @@ type LiveStatus = "idle" | "connecting" | "listening" | "stopping" | "stopped" |
 type NoteSource = "source" | "translation" | "both"
 type DemoTimer = number
 
+interface LiveRecording {
+  url: string
+  fileName: string
+  mimeType: string
+  size: number
+}
+
 interface TokenResponse {
   token: string
   model: string
@@ -79,9 +86,14 @@ export function useLiveTranslate() {
   const [changingType, setChangingType] = useState(false)
   const [usageTokens, setUsageTokens] = useState<number | null>(null)
   const [targetLanguageCode, setTargetLanguageCode] = useState<LiveTranslateLanguageCode>("ko")
+  const [recording, setRecording] = useState<LiveRecording | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioRef = useRef<AudioResources | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<BlobPart[]>([])
+  const recordingUrlRef = useRef<string | null>(null)
   const startedAtRef = useRef(0)
   const chunkIdRef = useRef(0)
   const sourceTextRef = useRef("")
@@ -98,6 +110,87 @@ export function useLiveTranslate() {
     demoRunIdRef.current += 1
     isDemoRef.current = false
   }, [])
+
+  const clearRecording = useCallback(() => {
+    if (recordingUrlRef.current) {
+      URL.revokeObjectURL(recordingUrlRef.current)
+      recordingUrlRef.current = null
+    }
+    recordingChunksRef.current = []
+    setRecording(null)
+    setIsRecording(false)
+  }, [])
+
+  const stopRecording = useCallback((discard = false) => {
+    const recorder = recorderRef.current
+    recorderRef.current = null
+    if (!recorder) {
+      if (discard) clearRecording()
+      return
+    }
+
+    recorder.onstop = () => {
+      setIsRecording(false)
+      if (discard) {
+        clearRecording()
+        return
+      }
+
+      const chunks = recordingChunksRef.current
+      if (chunks.length === 0) {
+        setRecording(null)
+        return
+      }
+
+      if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current)
+      const mimeType = recorder.mimeType || "audio/webm"
+      const blob = new Blob(chunks, { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      recordingUrlRef.current = url
+      setRecording({
+        url,
+        fileName: createRecordingFileName(mimeType),
+        mimeType,
+        size: blob.size,
+      })
+      recordingChunksRef.current = []
+    }
+
+    if (recorder.state === "inactive") {
+      recorder.onstop(new Event("stop"))
+      return
+    }
+    recorder.stop()
+  }, [clearRecording])
+
+  const startRecording = useCallback(
+    (stream: MediaStream) => {
+      if (typeof MediaRecorder === "undefined") return
+
+      clearRecording()
+      try {
+        const mimeType = getRecordingMimeType()
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+
+        recordingChunksRef.current = []
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordingChunksRef.current.push(event.data)
+        }
+        recorder.onerror = () => {
+          setIsRecording(false)
+        }
+
+        recorderRef.current = recorder
+        recorder.start(1000)
+        setIsRecording(true)
+      } catch {
+        recorderRef.current = null
+        recordingChunksRef.current = []
+        setIsRecording(false)
+      }
+    },
+    [clearRecording],
+  )
 
   const appendChunk = useCallback((kind: "source" | "translation", text: string, languageCode?: string) => {
     const normalized = normalizeTranscriptPiece(text)
@@ -127,6 +220,7 @@ export function useLiveTranslate() {
     }
 
     setStatus((prev) => (prev === "idle" || prev === "stopped" ? prev : "stopping"))
+    stopRecording(false)
     stopAudio(audioRef.current)
     audioRef.current = null
 
@@ -139,10 +233,11 @@ export function useLiveTranslate() {
       setStatus("stopped")
     }
     wsRef.current = null
-  }, [clearDemoTimers])
+  }, [clearDemoTimers, stopRecording])
 
   const reset = useCallback(() => {
     clearDemoTimers()
+    stopRecording(true)
     stopAudio(audioRef.current)
     audioRef.current = null
     wsRef.current?.close()
@@ -157,7 +252,7 @@ export function useLiveTranslate() {
     setUsageTokens(null)
     setStatus("idle")
     setChangingType(false)
-  }, [clearDemoTimers])
+  }, [clearDemoTimers, stopRecording])
 
   const start = useCallback(
     async (options: { targetLanguageCode: LiveTranslateLanguageCode; echoTargetLanguage: boolean }) => {
@@ -183,8 +278,10 @@ export function useLiveTranslate() {
             }),
           )
         })
+        startRecording(audioRef.current.stream)
         setStatus("listening")
       } catch (e) {
+        stopRecording(true)
         stopAudio(audioRef.current)
         audioRef.current = null
         wsRef.current?.close()
@@ -193,7 +290,7 @@ export function useLiveTranslate() {
         setStatus("error")
       }
     },
-    [reset],
+    [reset, startRecording, stopRecording],
   )
 
   const buildNoteInput = useCallback((source: NoteSource) => {
@@ -344,12 +441,13 @@ export function useLiveTranslate() {
         setStatus("error")
       }
       ws.onclose = () => {
+        stopRecording(false)
         stopAudio(audioRef.current)
         audioRef.current = null
         setStatus((prev) => (prev === "error" || prev === "refining" ? prev : "stopped"))
       }
     },
-    [appendChunk],
+    [appendChunk, stopRecording],
   )
 
   async function openLiveSocket(
@@ -408,6 +506,8 @@ export function useLiveTranslate() {
     changingType,
     usageTokens,
     targetLanguageCode,
+    recording,
+    isRecording,
     start,
     stop,
     reset,
@@ -620,6 +720,17 @@ function roundTime(seconds: number) {
 function elapsedSeconds(startedAt: number) {
   if (!startedAt) return 0
   return Math.max(0, Math.round((performance.now() - startedAt) / 100) / 10)
+}
+
+function getRecordingMimeType() {
+  const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) || ""
+}
+
+function createRecordingFileName(mimeType: string) {
+  const extension = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "m4a" : "webm"
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
+  return `transcript-studio-live-recording-${timestamp}.${extension}`
 }
 
 function toMessage(e: unknown, fallback: string): string {

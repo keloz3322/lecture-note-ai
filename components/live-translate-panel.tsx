@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangle, Languages, Loader2, Mic, RotateCcw, Sparkles, Square, Wand2 } from "lucide-react"
+import { AlertTriangle, Download, Languages, Loader2, Mic, RotateCcw, Sparkles, Square, Wand2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { DEFAULT_REFINE_ENGINE, getRefineEngine, REFINE_ENGINES } from "@/lib/engines"
 import {
@@ -148,6 +148,22 @@ export function LiveTranslatePanel() {
                 <p className="font-medium">처리 오류</p>
                 <p className="mt-0.5 text-destructive/90">{live.error}</p>
               </div>
+            </div>
+          )}
+
+          {live.recording && !isActive && (
+            <div className="mt-3 rounded-lg border border-border bg-background p-3">
+              <a
+                href={live.recording.url}
+                download={live.recording.fileName}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                <Download className="size-4" />
+                녹음 파일 다운로드
+              </a>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {live.recording.mimeType || "audio/webm"} · {formatBytes(live.recording.size)}
+              </p>
             </div>
           )}
         </section>
@@ -373,4 +389,12 @@ function formatElapsed(seconds: number) {
   const minutes = Math.floor(rounded / 60)
   const rest = rounded % 60
   return `${minutes}:${rest.toString().padStart(2, "0")}`
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** exponent
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
