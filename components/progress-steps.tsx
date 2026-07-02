@@ -16,16 +16,17 @@ interface ProgressStepsProps {
   steps: Record<PipelineStep, StepStatus>
   labels?: Partial<Record<PipelineStep, string>>
   details?: Partial<Record<PipelineStep, string>>
+  showCompletedDetails?: boolean
 }
 
-export function ProgressSteps({ order, steps, labels, details }: ProgressStepsProps) {
+export function ProgressSteps({ order, steps, labels, details, showCompletedDetails }: ProgressStepsProps) {
   return (
     <ol className="flex flex-col gap-1">
       {order.map((step, i) => {
         const status = steps[step]
         const isLast = i === order.length - 1
         const label = labels?.[step] ?? STEP_LABELS[step]
-        const detail = status === "active" ? details?.[step] : undefined
+        const detail = status === "active" || (showCompletedDetails && status === "complete") ? details?.[step] : undefined
         return (
           <li key={step} className="flex gap-3">
             <div className="flex flex-col items-center">

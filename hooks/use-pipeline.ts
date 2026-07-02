@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
 import { getDemoResult } from "@/lib/demo-result"
+import type { FileDemoPresetId } from "@/lib/demo-result"
 import { getTranscriptionEngine } from "@/lib/engines"
 import type {
   AudioFileMeta,
@@ -27,6 +28,10 @@ const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false
 export interface EngineSelection {
   transcriptionEngine?: string
   refineEngine?: string
+}
+
+export interface DemoRunOptions extends EngineSelection {
+  demoId?: FileDemoPresetId
 }
 
 export interface PipelineState {
@@ -209,7 +214,7 @@ export function usePipeline() {
     }
   }, [setStep])
 
-  const runDemo = useCallback(async (engines?: EngineSelection) => {
+  const runDemo = useCallback(async (engines?: DemoRunOptions) => {
     abortRef.current = false
     lastTranscriptRef.current = null
     lastRefineEngineRef.current = undefined
@@ -245,6 +250,7 @@ export function usePipeline() {
         timestampStatus: demoTimestampStatus,
         transcriptionEngineLabel: transcription.label,
         refineEngine: engines?.refineEngine,
+        demoId: engines?.demoId,
       }),
       isRunning: false,
       activeStep: "done",

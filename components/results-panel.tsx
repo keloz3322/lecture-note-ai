@@ -1,9 +1,20 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CheckSquare, Clock3, Download, FileText, ListChecks, Quote, ScrollText, Sparkles } from "lucide-react"
+import {
+  Check,
+  CheckSquare,
+  Clock3,
+  Download,
+  FileText,
+  ListChecks,
+  PencilLine,
+  ScrollText,
+  Sparkles,
+  X,
+} from "lucide-react"
 import { buildMarkdown, buildPlainText, downloadTextFile, formatDuration } from "@/lib/format"
-import type { RefineResult, RefineSection, TabKey } from "@/lib/types"
+import type { RefineResult, RefineSection } from "@/lib/types"
 import { CONTENT_TYPES, getContentType, getCoreLabel, type ContentTypeId } from "@/lib/content-types"
 import { CopyButton } from "./copy-button"
 
@@ -14,78 +25,96 @@ interface ResultsPanelProps {
   onChangeType?: (type: ContentTypeId) => void
   /** True while a type-change refine is in flight. */
   changingType?: boolean
+  /** Render without the outer card frame (when embedded in a parent card). */
+  frameless?: boolean
 }
 
-/** Core tabs, with labels that adapt to the content type. */
-function buildCoreTabs(
-  contentType: ContentTypeId,
-  timelineAvailable: boolean,
-): { key: TabKey; label: string; icon: typeof FileText; disabled?: boolean }[] {
-  return [
-    { key: "summary", label: "요약", icon: FileText },
-    { key: "timeline", label: getCoreLabel(contentType, "timeline"), icon: Clock3, disabled: !timelineAvailable },
-    { key: "keyPoints", label: getCoreLabel(contentType, "keyPoints"), icon: ListChecks },
-    { key: "transcript", label: "정리된 전사문", icon: ScrollText },
-  ]
+type ViewKey = "note" | "timeline" | "transcript"
+
+/** User edits layered over the AI result. Reset whenever a new result arrives. */
+interface ResultEdits {
+  summary?: string
+  transcript?: string
 }
 
-function sectionIcon(kind: RefineSection["kind"]) {
-  if (kind === "qa") return CheckSquare
-  if (kind === "text") return FileText
-  return Quote
-}
-
-export function ResultsPanel({ result, fileName, onChangeType, changingType }: ResultsPanelProps) {
-  const [tab, setTab] = useState<TabKey>("summary")
+export function ResultsPanel({ result, fileName, onChangeType, changingType, frameless }: ResultsPanelProps) {
+  const [view, setView] = useState<ViewKey>("note")
+  const [edits, setEdits] = useState<ResultEdits>({})
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
   const timelineAvailable = result.timestampStatus === "available" || result.timestampStatus === "estimated"
 
-  const coreTabs = useMemo(() => buildCoreTabs(result.contentType, timelineAvailable), [result.contentType, timelineAvailable])
+  // A fresh AI result invalidates local edits and any view that no longer applies.
+  useEffect(() => {
+    setEdits({})
+  }, [result])
 
-  // Only show section tabs that actually have content.
+  useEffect(() => {
+    if (view === "timeline" && !timelineAvailable) setView("note")
+  }, [view, timelineAvailable])
+
+  const summaryText = edits.summary ?? result.summary
+  const transcriptText = edits.transcript ?? result.cleanedTranscript
+  const edited = edits.summary !== undefined || edits.transcript !== undefined
+
+  /** Result with user edits applied, used for copy and export. */
+  const exportResult = useMemo<RefineResult>(
+    () => ({ ...result, summary: summaryText, cleanedTranscript: transcriptText }),
+    [result, summaryText, transcriptText],
+  )
+
   const sectionTabs = useMemo(() => result.sections.filter((s) => s.items.length > 0), [result.sections])
 
-  // When the content type changes, the active tab may point at a section that no
-  // longer exists. Fall back to the summary tab so the panel never goes blank.
-  useEffect(() => {
-    const validKeys = new Set<TabKey>([
-      ...coreTabs.filter((t) => !t.disabled).map((t) => t.key),
-      ...sectionTabs.map((s) => s.id),
-    ])
-    if (!validKeys.has(tab)) setTab("summary")
-  }, [coreTabs, sectionTabs, tab])
-
-  const tabText = useMemo(() => getTabText(result, tab), [result, tab])
+  const viewText = useMemo(
+    () => getViewText(exportResult, view, sectionTabs),
+    [exportResult, view, sectionTabs],
+  )
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
-      {/* Toolbar */}
+    <div
+      className={`flex h-full flex-col overflow-hidden bg-card ${
+        frameless ? "" : "rounded-xl border border-border"
+      }`}
+    >
+      {/* Document header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-7 items-center justify-center rounded-md bg-lane-note/15 text-lane-note">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-lane-note/15 text-lane-note">
             <Sparkles className="size-4" />
           </span>
-          <h2 className="text-sm font-semibold text-card-foreground">노트</h2>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-card-foreground" title={baseName}>
+              {baseName}
+            </h2>
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              AI 생성 노트 · 검토 후 사용하세요
+              {edited && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand-muted px-1.5 py-px font-medium text-brand">
+                  <PencilLine className="size-2.5" />
+                  수정됨
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <TypeSelector
             value={result.contentType}
             detected={result.detectedType}
             disabled={changingType}
             onChange={onChangeType}
           />
-        </div>
-        <div className="flex items-center gap-2">
-          <CopyButton getText={() => tabText} label="탭 복사" />
+          <CopyButton getText={() => viewText} label="복사" />
           <button
             type="button"
-            onClick={() => downloadTextFile(buildMarkdown(result, baseName), `${baseName}.md`)}
+            onClick={() => downloadTextFile(buildMarkdown(exportResult, baseName), `${baseName}.md`)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
           >
             <Download className="size-3.5" />
-            Markdown
+            MD
           </button>
           <button
             type="button"
-            onClick={() => downloadTextFile(buildPlainText(result, baseName), `${baseName}.txt`)}
+            onClick={() => downloadTextFile(buildPlainText(exportResult, baseName), `${baseName}.txt`)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
           >
             <Download className="size-3.5" />
@@ -94,30 +123,25 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* View switcher */}
       <div className="scrollbar-subtle flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
-        {coreTabs.map(({ key, label, icon: Icon, disabled }) => (
-          <TabButton
-            key={key}
-            active={tab === key}
-            disabled={disabled}
-            onClick={() => setTab(key)}
-            icon={Icon}
-            label={label}
-          />
-        ))}
-        {sectionTabs.map((section) => (
-          <TabButton
-            key={section.id}
-            active={tab === section.id}
-            onClick={() => setTab(section.id)}
-            icon={sectionIcon(section.kind)}
-            label={section.title}
-          />
-        ))}
+        <ViewButton active={view === "note"} onClick={() => setView("note")} icon={FileText} label="노트 문서" />
+        <ViewButton
+          active={view === "timeline"}
+          disabled={!timelineAvailable}
+          onClick={() => setView("timeline")}
+          icon={Clock3}
+          label={getCoreLabel(result.contentType, "timeline")}
+        />
+        <ViewButton
+          active={view === "transcript"}
+          onClick={() => setView("transcript")}
+          icon={ScrollText}
+          label="정리된 전사문"
+        />
       </div>
 
-      {result.timelineNotice && (
+      {result.timelineNotice && view !== "transcript" && (
         <div className="flex items-start gap-2 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
           <Clock3 className="mt-0.5 size-3.5 shrink-0" />
           <span>{result.timelineNotice}</span>
@@ -125,14 +149,37 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
       )}
 
       {/* Content */}
-      <div className="scrollbar-subtle flex-1 overflow-y-auto p-4 sm:p-5">
-        <TabContent result={result} tab={tab} />
+      <div className="scrollbar-subtle flex-1 overflow-y-auto">
+        {view === "note" && (
+          <NoteDocument
+            result={result}
+            summaryText={summaryText}
+            summaryEdited={edits.summary !== undefined}
+            onSummaryChange={(value) =>
+              setEdits((prev) => (value === result.summary ? { ...prev, summary: undefined } : { ...prev, summary: value }))
+            }
+            sections={sectionTabs}
+          />
+        )}
+        {view === "timeline" && <TimelineView result={result} />}
+        {view === "transcript" && (
+          <TranscriptView
+            text={transcriptText}
+            edited={edits.transcript !== undefined}
+            original={result.cleanedTranscript}
+            onChange={(value) =>
+              setEdits((prev) =>
+                value === result.cleanedTranscript ? { ...prev, transcript: undefined } : { ...prev, transcript: value },
+              )
+            }
+          />
+        )}
       </div>
     </div>
   )
 }
 
-function TabButton({
+function ViewButton({
   active,
   disabled,
   onClick,
@@ -188,12 +235,11 @@ function TypeSelector({
   return (
     <label className="inline-flex items-center gap-1.5">
       <span className="sr-only">콘텐츠 유형</span>
-      <Sparkles className="size-3 text-muted-foreground" aria-hidden />
       <select
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as ContentTypeId)}
-        className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={value === detected ? "AI가 감지한 유형" : `AI 감지: ${getContentType(detected).label}`}
       >
         {CONTENT_TYPES.map((type) => (
@@ -202,73 +248,225 @@ function TypeSelector({
           </option>
         ))}
       </select>
-      {changingTypeIndicator(disabled)}
+      {disabled && <span className="text-xs text-muted-foreground">재생성 중…</span>}
     </label>
   )
 }
 
-function changingTypeIndicator(disabled?: boolean) {
-  if (!disabled) return null
-  return <span className="text-xs text-muted-foreground">재생성 중…</span>
+/**
+ * Summary-first document view: overview → key points → type-specific sections,
+ * stacked as one readable, reviewable document instead of scattered tabs.
+ */
+function NoteDocument({
+  result,
+  summaryText,
+  summaryEdited,
+  onSummaryChange,
+  sections,
+}: {
+  result: RefineResult
+  summaryText: string
+  summaryEdited: boolean
+  onSummaryChange: (value: string) => void
+  sections: RefineSection[]
+}) {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-7 px-4 py-5 sm:px-6">
+      <DocumentBlock
+        title="요약"
+        icon={FileText}
+        copyText={summaryText}
+        edited={summaryEdited}
+        editable={{ value: summaryText, original: result.summary, onChange: onSummaryChange, rows: 6 }}
+      >
+        <p className="text-[15px] leading-7 text-card-foreground">{summaryText}</p>
+      </DocumentBlock>
+
+      <DocumentBlock
+        title={getCoreLabel(result.contentType, "keyPoints")}
+        icon={ListChecks}
+        copyText={result.keyPoints.map((p) => `- ${p}`).join("\n")}
+      >
+        <ul className="space-y-2.5">
+          {result.keyPoints.map((p, i) => (
+            <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-card-foreground">
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
+              <span>{p}</span>
+            </li>
+          ))}
+        </ul>
+      </DocumentBlock>
+
+      {sections.map((section) => (
+        <DocumentBlock
+          key={section.id}
+          title={section.title}
+          icon={section.kind === "qa" ? CheckSquare : ListChecks}
+          copyText={section.items
+            .map((item, i) => (section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`))
+            .join("\n")}
+        >
+          <SectionContent section={section} />
+        </DocumentBlock>
+      ))}
+    </div>
+  )
 }
 
-function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
-  if (tab === "timeline") {
-    if (result.timeline.length === 0) {
-      return <p className="text-sm text-muted-foreground">타임라인 결과가 없습니다.</p>
-    }
-    return (
-      <ol className="space-y-2.5">
-        {result.timeline.map((item, i) => (
-          <li
-            key={`${item.start}-${item.end}-${i}`}
-            className="rounded-lg border border-border border-l-2 border-l-lane-note/60 bg-background/40 p-3.5"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md bg-lane-note/12 px-1.5 py-0.5 font-mono text-xs font-medium tabular-nums text-lane-note">
-                {formatDuration(item.start)}-{formatDuration(item.end)}
-              </span>
-              <h3 className="text-sm font-semibold text-card-foreground">{item.title}</h3>
+/** One document section with a heading row, copy control, and optional inline editing. */
+function DocumentBlock({
+  title,
+  icon: Icon,
+  copyText,
+  edited,
+  editable,
+  children,
+}: {
+  title: string
+  icon: typeof FileText
+  copyText: string
+  edited?: boolean
+  editable?: { value: string; original: string; onChange: (value: string) => void; rows: number }
+  children: React.ReactNode
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <Icon className="size-4 text-muted-foreground" aria-hidden />
+        <h3 className="text-sm font-semibold text-card-foreground">{title}</h3>
+        {edited && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand-muted px-1.5 py-px text-[10px] font-medium text-brand">
+            <PencilLine className="size-2.5" />
+            수정됨
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {editable && !editing && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(editable.value)
+                setEditing(true)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <PencilLine className="size-3.5" />
+              편집
+            </button>
+          )}
+          <CopyButton getText={() => copyText} label="복사" />
+        </div>
+      </div>
+      <div className="pt-3">
+        {editable && editing ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={editable.rows}
+              className="scrollbar-subtle w-full resize-y rounded-lg border border-border bg-background p-3 text-sm leading-relaxed text-foreground focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              aria-label={`${title} 편집`}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  editable.onChange(draft)
+                  setEditing(false)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-brand-foreground transition-opacity hover:opacity-90"
+              >
+                <Check className="size-3.5" />
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                <X className="size-3.5" />
+                취소
+              </button>
+              {edited && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    editable.onChange(editable.original)
+                    setEditing(false)
+                  }}
+                  className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  AI 원본으로 되돌리기
+                </button>
+              )}
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
-          </li>
-        ))}
-      </ol>
-    )
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
+  )
+}
+
+/** Otter-style timestamped rows: mono time rail + title/summary content. */
+function TimelineView({ result }: { result: RefineResult }) {
+  if (result.timeline.length === 0) {
+    return <p className="px-5 py-6 text-sm text-muted-foreground">타임라인 결과가 없습니다.</p>
   }
-  if (tab === "transcript") {
-    return (
-      <div className="rounded-lg border-l-2 border-l-lane-source/50 bg-background/40 py-1 pl-4 pr-1">
-        <div className="space-y-3 text-sm leading-relaxed text-card-foreground">
-          {result.cleanedTranscript.split("\n\n").map((p, i) => (
+  return (
+    <ol className="mx-auto flex max-w-3xl flex-col px-4 py-4 sm:px-6">
+      {result.timeline.map((item, i) => (
+        <li
+          key={`${item.start}-${item.end}-${i}`}
+          className="group grid grid-cols-[92px_minmax(0,1fr)] gap-3 border-l-2 border-border py-3 pl-4 transition-colors hover:border-lane-note/70 sm:grid-cols-[110px_minmax(0,1fr)]"
+        >
+          <span className="pt-0.5 font-mono text-xs tabular-nums leading-5 text-lane-note">
+            {formatDuration(item.start)}
+            <span className="text-muted-foreground/60"> – {formatDuration(item.end)}</span>
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-card-foreground">{item.title}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** Cleaned transcript as readable paragraphs with whole-document editing. */
+function TranscriptView({
+  text,
+  edited,
+  original,
+  onChange,
+}: {
+  text: string
+  edited: boolean
+  original: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+      <DocumentBlock
+        title="정리된 전사문"
+        icon={ScrollText}
+        copyText={text}
+        edited={edited}
+        editable={{ value: text, original, onChange, rows: 18 }}
+      >
+        <div className="space-y-3.5 text-[15px] leading-7 text-card-foreground">
+          {text.split("\n\n").map((p, i) => (
             <p key={i}>{p}</p>
           ))}
         </div>
-      </div>
-    )
-  }
-  if (tab === "summary") {
-    return <p className="max-w-prose text-[15px] leading-7 text-card-foreground">{result.summary}</p>
-  }
-  if (tab === "keyPoints") {
-    return (
-      <ul className="space-y-2.5">
-        {result.keyPoints.map((p, i) => (
-          <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-card-foreground">
-            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
-            <span>{p}</span>
-          </li>
-        ))}
-      </ul>
-    )
-  }
-
-  // Dynamic, type-specific section.
-  const section = result.sections.find((s) => s.id === tab)
-  if (!section) {
-    return <p className="text-sm text-muted-foreground">표시할 내용이 없습니다.</p>
-  }
-  return <SectionContent section={section} />
+      </DocumentBlock>
+    </div>
+  )
 }
 
 function SectionContent({ section }: { section: RefineSection }) {
@@ -310,22 +508,26 @@ function SectionContent({ section }: { section: RefineSection }) {
   )
 }
 
-function getTabText(result: RefineResult, tab: TabKey): string {
-  switch (tab) {
+function getViewText(result: RefineResult, view: ViewKey, sections: RefineSection[]): string {
+  switch (view) {
     case "timeline":
       return result.timeline
         .map((item) => `- ${formatDuration(item.start)}-${formatDuration(item.end)} ${item.title}: ${item.summary}`)
         .join("\n")
     case "transcript":
       return result.cleanedTranscript
-    case "summary":
-      return result.summary
-    case "keyPoints":
-      return result.keyPoints.map((p) => `- ${p}`).join("\n")
-    default: {
-      const section = result.sections.find((s) => s.id === tab)
-      if (!section) return ""
-      return section.items.map((item, i) => (section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`)).join("\n")
+    case "note": {
+      const lines: string[] = [result.summary, ""]
+      lines.push(`[ ${getCoreLabel(result.contentType, "keyPoints")} ]`)
+      result.keyPoints.forEach((p) => lines.push(`- ${p}`))
+      for (const section of sections) {
+        lines.push("")
+        lines.push(`[ ${section.title} ]`)
+        section.items.forEach((item, i) => {
+          lines.push(section.kind === "qa" ? `${i + 1}. ${item}` : `- ${item}`)
+        })
+      }
+      return lines.join("\n")
     }
   }
 }
