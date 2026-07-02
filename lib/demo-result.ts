@@ -1,7 +1,7 @@
 import kurzweilDemoResult from "@/lib/kurzweil-demo-result.json"
 import interviewDemoResult from "@/lib/interview-demo-result.json"
 import meetingDemoResult from "@/lib/meeting-demo-result.json"
-import type { AudioFileMeta, RefineResult, TimestampStatus } from "@/lib/types"
+import type { AudioFileMeta, RefineResult, TimestampStatus, TranscribeResult, TranscriptSegment } from "@/lib/types"
 
 export const DEMO_FILE_NAME = "Ray Kurzweil - MIT 2025 Robert A. Muh Award Lecture"
 export type FileDemoPresetId = "lecture" | "interview" | "meeting"
@@ -112,4 +112,36 @@ export function getDemoResult({
     timeline: [],
     timelineNotice,
   }
+}
+
+export function getDemoTranscription({
+  timestampStatus = "available",
+  transcriptionEngineLabel,
+  demoId,
+}: {
+  timestampStatus?: TimestampStatus
+  transcriptionEngineLabel?: string
+  demoId?: string
+} = {}): TranscribeResult {
+  const preset = getFileDemoPreset(demoId)
+  const result = getDemoResult({ timestampStatus, transcriptionEngineLabel, demoId })
+
+  return {
+    rawTranscript: result.cleanedTranscript,
+    durationSeconds: preset.meta.durationSeconds,
+    segments: timestampStatus === "available" || timestampStatus === "estimated" ? demoSegments(result) : undefined,
+    timestampStatus,
+    transcriptionEngineLabel,
+  }
+}
+
+function demoSegments(result: RefineResult): TranscriptSegment[] | undefined {
+  if (result.timeline.length === 0) return undefined
+
+  return result.timeline.map((item, index) => ({
+    id: index,
+    start: item.start,
+    end: item.end,
+    text: `${item.title}. ${item.summary}`,
+  }))
 }

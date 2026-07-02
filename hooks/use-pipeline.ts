@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
-import { getDemoResult } from "@/lib/demo-result"
+import { getDemoResult, getDemoTranscription } from "@/lib/demo-result"
 import type { FileDemoPresetId } from "@/lib/demo-result"
 import { getTranscriptionEngine } from "@/lib/engines"
 import type {
@@ -217,7 +217,7 @@ export function usePipeline() {
   const runDemo = useCallback(async (engines?: DemoRunOptions) => {
     abortRef.current = false
     lastTranscriptRef.current = null
-    lastRefineEngineRef.current = undefined
+    lastRefineEngineRef.current = engines?.refineEngine
     const transcription = getTranscriptionEngine(engines?.transcriptionEngine)
     const demoTimestampStatus = transcription.supportsTimestamps ? "available" : "unsupported"
     setState({
@@ -243,6 +243,11 @@ export function usePipeline() {
     if (!(await advance("transcribe", DEMO_STEP_DELAYS_MS.transcribe))) return
     if (!(await advance("refine", DEMO_STEP_DELAYS_MS.refine))) return
     if (abortRef.current) return
+    lastTranscriptRef.current = getDemoTranscription({
+      timestampStatus: demoTimestampStatus,
+      transcriptionEngineLabel: transcription.label,
+      demoId: engines?.demoId,
+    })
     setStep("done", "complete")
     setState((prev) => ({
       ...prev,

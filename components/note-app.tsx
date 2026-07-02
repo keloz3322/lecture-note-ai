@@ -297,7 +297,7 @@ export function NoteApp() {
                 <ResultsPanel
                   result={state.result}
                   fileName={meta.name}
-                  onChangeType={isDemo ? undefined : changeContentType}
+                  onChangeType={changeContentType}
                   changingType={state.changingType}
                 />
               ) : (
