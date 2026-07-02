@@ -5,6 +5,7 @@ import {
   LIVE_TRANSLATE_MODEL,
   type LiveTranslateLanguageCode,
 } from "@/lib/live-translate"
+import { getProviderResourceIssueMessage } from "@/lib/provider-errors"
 
 export const runtime = "nodejs"
 
@@ -60,15 +61,23 @@ export async function POST(request: Request) {
     },
   )
 
-  const data = (await tokenResponse.json().catch(() => ({}))) as GeminiTokenResponse
+  const responseText = await tokenResponse.text()
+  const data = parseGeminiTokenResponse(responseText)
   if (!tokenResponse.ok || !data.name) {
+    const providerMessage = getProviderResourceIssueMessage({
+      provider: "Gemini Live",
+      status: tokenResponse.status,
+      statusText: data.error?.status,
+      message: data.error?.message || responseText,
+    })
     return NextResponse.json(
       {
         error:
+          providerMessage ||
           data.error?.message ||
           `${LIVE_TRANSLATE_ENGINE_LABEL} 세션 토큰을 발급하지 못했습니다. Gemini API 설정을 확인해 주세요.`,
       },
-      { status: tokenResponse.status || 502 },
+      { status: tokenResponse.ok ? 502 : tokenResponse.status || 502 },
     )
   }
 
@@ -80,4 +89,12 @@ export async function POST(request: Request) {
     expireTime: data.expireTime,
     newSessionExpireTime: data.newSessionExpireTime,
   })
+}
+
+function parseGeminiTokenResponse(responseText: string): GeminiTokenResponse {
+  try {
+    return JSON.parse(responseText) as GeminiTokenResponse
+  } catch {
+    return {}
+  }
 }

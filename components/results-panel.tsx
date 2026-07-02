@@ -61,7 +61,10 @@ export function ResultsPanel({
   const summaryText = edits.summary ?? result.summary
   const transcriptText = edits.transcript ?? result.cleanedTranscript
   const edited = edits.summary !== undefined || edits.transcript !== undefined
-  const translationOffered = Boolean(result.translatedTranscriptKo) || shouldOfferKoreanTranslation(transcriptText)
+  const translationOffered =
+    Boolean(result.translatedTranscriptKo) ||
+    Boolean(result.canGenerateKoreanTranslation) ||
+    shouldOfferKoreanTranslation(transcriptText)
 
   // A fresh AI result invalidates local edits and any view that no longer applies.
   useEffect(() => {
@@ -516,6 +519,7 @@ function KoreanTranslationView({
   progress?: { completed: number; total: number } | null
   onRequest?: () => void
 }) {
+  const loadingLabel = getTranslationLoadingLabel(isLoading, progress)
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <section>
@@ -523,6 +527,12 @@ function KoreanTranslationView({
           <Languages className="size-4 text-muted-foreground" aria-hidden />
           <h3 className="text-sm font-semibold text-card-foreground">한국어 번역본</h3>
           <div className="ml-auto flex items-center gap-1.5">
+            {loadingLabel && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                {loadingLabel}
+              </span>
+            )}
             {text && <CopyButton getText={() => text} label="복사" />}
           </div>
         </div>
@@ -532,11 +542,14 @@ function KoreanTranslationView({
           </p>
         )}
         {text ? (
-          <div className="mt-4 space-y-3.5 text-[15px] leading-7 text-card-foreground">
-            {text.split("\n\n").map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
+          <>
+            {isLoading && <TranslationProgress progress={progress} />}
+            <div className="mt-4 space-y-3.5 text-[15px] leading-7 text-card-foreground">
+              {text.split("\n\n").map((p, i) => (
+                <p key={i}>{p}</p>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="mt-4 rounded-xl border border-dashed border-border bg-background/50 p-6 text-center">
             <p className="text-sm font-medium text-foreground">한국어 번역본이 아직 없습니다</p>
@@ -550,16 +563,36 @@ function KoreanTranslationView({
               className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
-              {isLoading && progress ? `번역 생성 중 (${progress.completed}/${progress.total})` : isLoading ? "번역 생성 중..." : "한국어 번역 생성"}
+              {loadingLabel ?? "한국어 번역 생성"}
             </button>
-            {isLoading && progress && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                전체 {progress.total}개 조각 중 {progress.completed}개 번역 완료
-              </p>
-            )}
+            {isLoading && <TranslationProgress progress={progress} />}
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+function getTranslationLoadingLabel(isLoading: boolean, progress?: { completed: number; total: number } | null) {
+  if (!isLoading) return null
+  if (!progress) return "번역 생성 중..."
+  if (progress.completed === 0) return `번역 준비 중 (0/${progress.total})`
+  return `번역 생성 중 (${progress.completed}/${progress.total})`
+}
+
+function TranslationProgress({ progress }: { progress?: { completed: number; total: number } | null }) {
+  if (!progress) return null
+  const total = Math.max(1, progress.total)
+  const percent = Math.min(100, Math.round((progress.completed / total) * 100))
+
+  return (
+    <div className="mt-3">
+      <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+        <div className="h-full rounded-full bg-brand transition-all duration-150" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        {total}개 중 {progress.completed}개 완료
+      </p>
     </div>
   )
 }

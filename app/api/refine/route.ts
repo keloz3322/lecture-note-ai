@@ -18,6 +18,7 @@ import {
   type ContentTypeId,
 } from "@/lib/content-types"
 import { getRefineEngine, type RefineEngine } from "@/lib/engines"
+import { getProviderResourceIssueMessage } from "@/lib/provider-errors"
 
 type RefineInput = {
   rawTranscript: string
@@ -197,6 +198,8 @@ async function refineWithGateway(engine: RefineEngine, input: RefineInput): Prom
 
     return chooseBetterGeminiResult(result, normalizeRefineResult(retry.object, input), input)
   } catch (error) {
+    const providerMessage = getProviderResourceIssueMessage({ provider: "AI Gateway", error })
+    if (providerMessage) throw new Error(providerMessage)
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`AI Gateway 교정/요약 실패 (${engine.modelId}): ${detail}`)
   }
@@ -258,6 +261,12 @@ async function refineWithGemini(apiKey: string, input: RefineInput): Promise<Ref
 
     const text = await response.text()
     if (!response.ok) {
+      const providerMessage = getProviderResourceIssueMessage({
+        provider: "Gemini API",
+        status: response.status,
+        message: text,
+      })
+      if (providerMessage) throw new Error(providerMessage)
       lastError = new Error(geminiErrorMessage(response.status, text, model))
       if (shouldTryNextGeminiModel(response.status, text)) continue
       throw lastError

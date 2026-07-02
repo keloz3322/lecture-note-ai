@@ -135,6 +135,8 @@ export interface RefineResult {
   cleanedTranscript: string
   /** Optional Korean translation of cleanedTranscript for non-Korean transcripts. */
   translatedTranscriptKo?: string
+  /** True when the UI should offer Korean translation generation before text exists. */
+  canGenerateKoreanTranslation?: boolean
   /** Reader-facing note when the Korean translation is partial or otherwise special. */
   translatedTranscriptKoNotice?: string
   summary: string

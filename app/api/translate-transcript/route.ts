@@ -3,6 +3,7 @@ import { generateObject } from "ai"
 import { z } from "zod"
 import { getContentType, isContentTypeId } from "@/lib/content-types"
 import { getRefineEngine, type RefineEngine } from "@/lib/engines"
+import { getProviderResourceIssueMessage } from "@/lib/provider-errors"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -159,6 +160,8 @@ async function translateWithGateway(
     })
     return normalizeTranslationOutput(object)
   } catch (error) {
+    const providerMessage = getProviderResourceIssueMessage({ provider: "AI Gateway", error })
+    if (providerMessage) throw new Error(providerMessage)
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`AI Gateway 한국어 번역 실패 (${engine.modelId}): ${detail}`)
   }
@@ -175,6 +178,12 @@ async function translateWithGemini(
     const text = await response.text()
 
     if (!response.ok) {
+      const providerMessage = getProviderResourceIssueMessage({
+        provider: "Gemini API",
+        status: response.status,
+        message: text,
+      })
+      if (providerMessage) throw new Error(providerMessage)
       lastError = new Error(geminiErrorMessage(response.status, text, model))
       if (shouldTryNextGeminiModel(response.status, text)) continue
       throw lastError

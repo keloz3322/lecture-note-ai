@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react"
 import { upload } from "@vercel/blob/client"
-import { getDemoResult, getDemoTranscription } from "@/lib/demo-result"
+import { getDemoResult, getDemoTranscription, getDemoTranslation } from "@/lib/demo-result"
 import type { FileDemoPresetId } from "@/lib/demo-result"
 import { getTranscriptionEngine } from "@/lib/engines"
 import type {
@@ -21,6 +21,9 @@ const DEMO_STEP_DELAYS_MS: Record<Exclude<PipelineStep, "done">, number> = {
   transcribe: 6500,
   refine: 4500,
 }
+const DEMO_TRANSLATION_FIRST_TOKEN_DELAY_MS = 2000
+const DEMO_TRANSLATION_CHUNK_DELAY_MS = 80
+const DEMO_TRANSLATION_PARAGRAPHS_PER_CHUNK = 5
 // Blob upload is the default path (it bypasses the ~4.5MB serverless body limit).
 // Set NEXT_PUBLIC_ENABLE_BLOB_UPLOAD="false" to force the legacy direct-upload path.
 const ENABLE_BLOB_UPLOAD = process.env.NEXT_PUBLIC_ENABLE_BLOB_UPLOAD !== "false"
@@ -53,6 +56,12 @@ interface TranslationResponse extends Pick<RefineResult, "translatedTranscriptKo
   chunkCount?: number
   completedChunks?: number
   chunkIndex?: number
+}
+
+interface PreparedDemoTranslation {
+  sourceText: string
+  translatedTranscriptKo: string
+  translatedTranscriptKoNotice?: string
 }
 
 function initialSteps(): Record<PipelineStep, StepStatus> {
@@ -97,6 +106,7 @@ export function usePipeline() {
   const lastTranscriptRef = useRef<TranscribeResult | null>(null)
   // Remember the engines used for this run so changeContentType reuses them.
   const lastRefineEngineRef = useRef<string | undefined>(undefined)
+  const demoTranslationRef = useRef<PreparedDemoTranslation | null>(null)
 
   const setStep = useCallback((step: PipelineStep, status: StepStatus) => {
     setState((prev) => ({
@@ -109,6 +119,7 @@ export function usePipeline() {
   const reset = useCallback(() => {
     abortRef.current = true
     lastTranscriptRef.current = null
+    demoTranslationRef.current = null
     setState({
       steps: initialSteps(),
       activeStep: null,
@@ -125,6 +136,7 @@ export function usePipeline() {
     abortRef.current = false
     lastTranscriptRef.current = null
     lastRefineEngineRef.current = engines?.refineEngine
+    demoTranslationRef.current = null
     setState({
       steps: initialSteps(),
       activeStep: null,
@@ -235,6 +247,7 @@ export function usePipeline() {
     abortRef.current = false
     lastTranscriptRef.current = null
     lastRefineEngineRef.current = engines?.refineEngine
+    demoTranslationRef.current = null
     const transcription = getTranscriptionEngine(engines?.transcriptionEngine)
     const demoTimestampStatus = transcription.supportsTimestamps ? "available" : "unsupported"
     setState({
@@ -262,6 +275,20 @@ export function usePipeline() {
     if (!(await advance("transcribe", DEMO_STEP_DELAYS_MS.transcribe))) return
     if (!(await advance("refine", DEMO_STEP_DELAYS_MS.refine))) return
     if (abortRef.current) return
+    const demoResult = getDemoResult({
+      timestampStatus: demoTimestampStatus,
+      transcriptionEngineLabel: transcription.label,
+      refineEngine: engines?.refineEngine,
+      demoId: engines?.demoId,
+    })
+    const demoTranslation = getDemoTranslation(engines?.demoId)
+    demoTranslationRef.current = demoTranslation?.translatedTranscriptKo
+      ? {
+          sourceText: demoResult.cleanedTranscript,
+          translatedTranscriptKo: demoTranslation.translatedTranscriptKo,
+          translatedTranscriptKoNotice: demoTranslation.translatedTranscriptKoNotice,
+        }
+      : null
     lastTranscriptRef.current = getDemoTranscription({
       timestampStatus: demoTimestampStatus,
       transcriptionEngineLabel: transcription.label,
@@ -270,12 +297,7 @@ export function usePipeline() {
     setStep("done", "complete")
     setState((prev) => ({
       ...prev,
-      result: getDemoResult({
-        timestampStatus: demoTimestampStatus,
-        transcriptionEngineLabel: transcription.label,
-        refineEngine: engines?.refineEngine,
-        demoId: engines?.demoId,
-      }),
+      result: demoResult,
       isRunning: false,
       activeStep: "done",
     }))
@@ -323,6 +345,62 @@ export function usePipeline() {
     const current = state.result
     if (!current?.cleanedTranscript || current.translatedTranscriptKo) return
 
+    const demoTranslation = demoTranslationRef.current
+    if (demoTranslation?.sourceText === current.cleanedTranscript) {
+      const chunks = buildDemoTranslationChunks(demoTranslation.translatedTranscriptKo)
+      const total = chunks.length
+      const visibleChunks: string[] = []
+
+      setState((prev) => ({
+        ...prev,
+        translatingTranscript: true,
+        translationProgress: { completed: 0, total },
+        error: null,
+        result:
+          prev.result?.cleanedTranscript === current.cleanedTranscript
+            ? { ...prev.result, translatedTranscriptKo: undefined, translatedTranscriptKoNotice: undefined }
+            : prev.result,
+      }))
+
+      await wait(DEMO_TRANSLATION_FIRST_TOKEN_DELAY_MS)
+
+      for (let index = 0; index < total; index++) {
+        if (abortRef.current) return
+        visibleChunks.push(chunks[index])
+        const completed = index + 1
+        const partialText = visibleChunks.join("\n\n")
+        setState((prev) => {
+          if (!prev.result || prev.result.cleanedTranscript !== current.cleanedTranscript) return prev
+          return {
+            ...prev,
+            result: {
+              ...prev.result,
+              translatedTranscriptKo: completed === total ? demoTranslation.translatedTranscriptKo : partialText,
+              translatedTranscriptKoNotice:
+                completed === total ? demoTranslation.translatedTranscriptKoNotice : undefined,
+            },
+            translationProgress: { completed, total },
+          }
+        })
+        if (index < total - 1) await wait(DEMO_TRANSLATION_CHUNK_DELAY_MS)
+      }
+
+      setState((prev) => {
+        if (!prev.result || prev.result.cleanedTranscript !== current.cleanedTranscript) return prev
+        return {
+          ...prev,
+          result: {
+            ...prev.result,
+            translatedTranscriptKo: demoTranslation.translatedTranscriptKo,
+            translatedTranscriptKoNotice: demoTranslation.translatedTranscriptKoNotice,
+          },
+          translatingTranscript: false,
+          translationProgress: null,
+        }
+      })
+      return
+    }
+
     setState((prev) => ({ ...prev, translatingTranscript: true, translationProgress: null, error: null }))
     try {
       const plan = await postJson<TranslationResponse>("/api/translate-transcript", {
@@ -356,7 +434,21 @@ export function usePipeline() {
           chunkIndex: index,
         })
         translatedChunks[index] = chunk.translatedTranscriptKo ?? ""
-        setState((prev) => ({ ...prev, translationProgress: { completed: index + 1, total } }))
+        const partialText = translatedChunks.filter(Boolean).join("\n\n").trim()
+        setState((prev) => {
+          if (!prev.result || prev.result.cleanedTranscript !== current.cleanedTranscript) {
+            return { ...prev, translationProgress: { completed: index + 1, total } }
+          }
+          return {
+            ...prev,
+            result: {
+              ...prev.result,
+              translatedTranscriptKo: partialText,
+              translatedTranscriptKoNotice: undefined,
+            },
+            translationProgress: { completed: index + 1, total },
+          }
+        })
       }
 
       const translated = {
@@ -398,4 +490,26 @@ function pickTranslation(response: TranslationResponse): Pick<RefineResult, "tra
     translatedTranscriptKo: response.translatedTranscriptKo,
     translatedTranscriptKoNotice: response.translatedTranscriptKoNotice,
   }
+}
+
+function buildDemoTranslationChunks(text: string): string[] {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  const units = paragraphs.length > 1 ? paragraphs : splitLongText(text, 900)
+  const chunks: string[] = []
+  for (let index = 0; index < units.length; index += DEMO_TRANSLATION_PARAGRAPHS_PER_CHUNK) {
+    chunks.push(units.slice(index, index + DEMO_TRANSLATION_PARAGRAPHS_PER_CHUNK).join("\n\n"))
+  }
+  return chunks.length > 0 ? chunks : [text]
+}
+
+function splitLongText(text: string, targetChars: number): string[] {
+  const chunks: string[] = []
+  for (let index = 0; index < text.length; index += targetChars) {
+    chunks.push(text.slice(index, index + targetChars).trim())
+  }
+  return chunks.filter(Boolean)
 }

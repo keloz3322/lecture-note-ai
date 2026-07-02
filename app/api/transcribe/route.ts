@@ -14,6 +14,7 @@ import { getExtension, formatBytes } from "@/lib/format"
 import { reencodeToOpus, shouldReencode, probeDurationSeconds } from "@/lib/transcode"
 import { createInputFile, computeSilenceScores, planChunks, extractChunkOpus } from "@/lib/vad-chunk"
 import { getChunkPlan, getTranscriptionEngine, type TranscriptionEngine } from "@/lib/engines"
+import { getProviderResourceIssueMessage } from "@/lib/provider-errors"
 
 class PayloadTooLargeError extends Error {}
 
@@ -234,7 +235,14 @@ async function transcribeWithGroq(
   fileForm.append("file", new File([prepared.bytes], prepared.fileName, { type: prepared.mediaType }), prepared.fileName)
 
   const fileResult = await requestGroq(apiKey, fileForm)
-  if (!fileResult.ok) throw new Error(groqErrorMessage(fileResult.status, fileResult.errorText))
+  if (!fileResult.ok) {
+    const providerMessage = getProviderResourceIssueMessage({
+      provider: "Groq",
+      status: fileResult.status,
+      message: fileResult.errorText,
+    })
+    throw new Error(providerMessage ?? groqErrorMessage(fileResult.status, fileResult.errorText))
+  }
 
   return normalizeGroqResult(fileResult.data)
 }
@@ -246,7 +254,14 @@ async function transcribeWithGateway(
 ): Promise<TranscribeResult> {
   const auth = await getAiGatewayAuth()
   const response = await requestGatewayTranscription(auth, prepared, engine)
-  if (!response.ok) throw new Error(`AI Gateway 전사 실패 (${engine.modelId}): ${response.errorText}`)
+  if (!response.ok) {
+    const providerMessage = getProviderResourceIssueMessage({
+      provider: "AI Gateway",
+      status: response.status,
+      message: response.errorText,
+    })
+    throw new Error(providerMessage ?? `AI Gateway 전사 실패 (${engine.modelId}): ${response.errorText}`)
+  }
 
   return normalizeGatewayResult(response.data)
 }

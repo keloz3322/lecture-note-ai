@@ -21,20 +21,20 @@ const MEETING_DEMO_TRANSLATION = meetingDemoTranslation as { translatedTranscrip
 const KOREAN_SOURCE_DEMO_TRANSLATION_NOTICE =
   "정리된 전사문 전체가 이미 한국어로 준비되어 있어 같은 풀 본문을 번역본 탭에도 제공합니다."
 const FULL_DEMO_TRANSLATION_NOTICE = "정리된 전사문 전체를 한국어로 미리 번역한 데모 번역본입니다."
-const KURZWEIL_DEMO_RESULT_WITH_TRANSLATION: RefineResult = {
-  ...KURZWEIL_DEMO_RESULT,
-  translatedTranscriptKo: KURZWEIL_DEMO_RESULT.cleanedTranscript,
-  translatedTranscriptKoNotice: KOREAN_SOURCE_DEMO_TRANSLATION_NOTICE,
-}
-const INTERVIEW_DEMO_RESULT_WITH_TRANSLATION: RefineResult = {
-  ...INTERVIEW_DEMO_RESULT,
-  translatedTranscriptKo: INTERVIEW_DEMO_RESULT.cleanedTranscript,
-  translatedTranscriptKoNotice: KOREAN_SOURCE_DEMO_TRANSLATION_NOTICE,
-}
-const MEETING_DEMO_RESULT_WITH_TRANSLATION: RefineResult = {
-  ...MEETING_DEMO_RESULT,
-  translatedTranscriptKo: MEETING_DEMO_TRANSLATION.translatedTranscriptKo,
-  translatedTranscriptKoNotice: FULL_DEMO_TRANSLATION_NOTICE,
+type DemoTranslation = Pick<RefineResult, "translatedTranscriptKo" | "translatedTranscriptKoNotice">
+const DEMO_TRANSLATIONS: Record<FileDemoPresetId, DemoTranslation> = {
+  lecture: {
+    translatedTranscriptKo: KURZWEIL_DEMO_RESULT.cleanedTranscript,
+    translatedTranscriptKoNotice: KOREAN_SOURCE_DEMO_TRANSLATION_NOTICE,
+  },
+  interview: {
+    translatedTranscriptKo: INTERVIEW_DEMO_RESULT.cleanedTranscript,
+    translatedTranscriptKoNotice: KOREAN_SOURCE_DEMO_TRANSLATION_NOTICE,
+  },
+  meeting: {
+    translatedTranscriptKo: MEETING_DEMO_TRANSLATION.translatedTranscriptKo,
+    translatedTranscriptKoNotice: FULL_DEMO_TRANSLATION_NOTICE,
+  },
 }
 
 export interface FileDemoPreset {
@@ -59,7 +59,7 @@ export const FILE_DEMO_PRESETS: FileDemoPreset[] = [
     description: "1시간 MIT 강연을 학습 노트와 복습 질문으로 정리합니다.",
     fileName: DEMO_FILE_NAME,
     meta: DEMO_FILE_META,
-    result: KURZWEIL_DEMO_RESULT_WITH_TRANSLATION,
+    result: KURZWEIL_DEMO_RESULT,
   },
   {
     id: "interview",
@@ -73,7 +73,7 @@ export const FILE_DEMO_PRESETS: FileDemoPreset[] = [
       type: "audio/ogg",
       durationSeconds: 847,
     },
-    result: INTERVIEW_DEMO_RESULT_WITH_TRANSLATION,
+    result: INTERVIEW_DEMO_RESULT,
     timings: {
       transcribeMs: 44_647,
       refineMs: 330_757,
@@ -91,7 +91,7 @@ export const FILE_DEMO_PRESETS: FileDemoPreset[] = [
       type: "audio/ogg",
       durationSeconds: 10_138,
     },
-    result: MEETING_DEMO_RESULT_WITH_TRANSLATION,
+    result: MEETING_DEMO_RESULT,
     timings: {
       transcribeMs: 569_000,
       refineMs: 27_579,
@@ -105,6 +105,10 @@ export function getFileDemoPreset(id: string | undefined | null): FileDemoPreset
   return FILE_DEMO_PRESETS.find((preset) => preset.id === id) ?? FILE_DEMO_PRESETS[0]
 }
 
+export function getDemoTranslation(id: string | undefined | null): DemoTranslation | null {
+  return DEMO_TRANSLATIONS[getFileDemoPreset(id).id] ?? null
+}
+
 export function getDemoResult({
   timestampStatus = "available",
   transcriptionEngineLabel,
@@ -115,7 +119,11 @@ export function getDemoResult({
   refineEngine?: string
   demoId?: string
 } = {}): RefineResult {
-  const base = getFileDemoPreset(demoId).result
+  const preset = getFileDemoPreset(demoId)
+  const base: RefineResult = {
+    ...preset.result,
+    canGenerateKoreanTranslation: Boolean(DEMO_TRANSLATIONS[preset.id]?.translatedTranscriptKo),
+  }
 
   if (timestampStatus === "available") {
     return { ...base, timestampStatus, timelineNotice: undefined }
