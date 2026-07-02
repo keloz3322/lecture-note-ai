@@ -5,12 +5,16 @@ import {
   AlertTriangle,
   AudioLines,
   FileAudio,
+  FileText,
   Languages,
   Loader2,
+  Mic,
   Play,
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  UploadCloud,
+  Wand2,
 } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
 import { DEMO_FILE_META, DEMO_FILE_NAME } from "@/lib/demo-result"
@@ -101,72 +105,81 @@ export function NoteApp() {
   return (
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground ring-1 ring-border/60">
-              <AudioLines className="size-5" />
+        <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground ring-1 ring-border/60">
+              <AudioLines className="size-4.5" />
             </div>
-            <div>
-              <h1 className="text-sm font-semibold leading-none tracking-tight text-foreground">Transcript Studio</h1>
-              <p className="mt-1 text-xs text-muted-foreground">음성 · 영상 · 실시간 번역을 학습 노트로 정리</p>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold leading-none tracking-tight text-foreground">
+                Transcript Studio
+              </h1>
+              <p className="mt-0.5 hidden truncate text-[11px] text-muted-foreground md:block">
+                음성 · 영상 · 실시간 번역을 학습 노트로
+              </p>
             </div>
           </div>
-          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground sm:inline-flex">
+
+          <nav
+            className="ml-auto flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 sm:ml-6"
+            role="tablist"
+            aria-label="작업 방식"
+          >
+            <ModeButton
+              active={mode === "live"}
+              icon={<Languages className="size-4" />}
+              label="실시간 번역·전사"
+              onClick={() => setMode("live")}
+            />
+            <ModeButton
+              active={mode === "file"}
+              icon={<FileAudio className="size-4" />}
+              label="파일 분석"
+              onClick={() => setMode("file")}
+            />
+          </nav>
+
+          <span className="ml-auto hidden shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground lg:inline-flex">
             <Sparkles className="size-3 text-brand" />
             AI Gateway + Gemini Live
           </span>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
-        <div
-          className="inline-flex w-full gap-1 rounded-xl border border-border bg-card p-1 sm:w-fit"
-          role="tablist"
-          aria-label="작업 방식"
-        >
-          <ModeButton
-            active={mode === "live"}
-            icon={<Languages className="size-4" />}
-            label="실시간 번역·전사"
-            onClick={() => setMode("live")}
-          />
-          <ModeButton
-            active={mode === "file"}
-            icon={<FileAudio className="size-4" />}
-            label="파일 분석"
-            onClick={() => setMode("file")}
-          />
-        </div>
-
+      <main className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
         {mode === "file" ? (
-          <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+          <div className="grid gap-4 lg:grid-cols-[330px_minmax(0,1fr)]">
             <aside className="flex flex-col gap-4">
-              <section>
-                <SectionLabel className="mb-2">파일</SectionLabel>
-                <UploadPanel
-                  file={file}
-                  meta={meta}
-                  disabled={state.isRunning}
-                  onSelect={onSelect}
-                  onClear={onClear}
-                  onValidationError={(message) => {
-                    setValidationError(message)
-                    setIsDemo(false)
-                    setFile(null)
-                    setMeta(null)
-                  }}
-                />
+              <section className="overflow-hidden rounded-xl border border-border bg-card">
+                <RailHeader step="1" title="소스 파일" description="분석할 음성 · 영상 파일을 선택하세요" />
+                <div className="p-3">
+                  <UploadPanel
+                    file={file}
+                    meta={meta}
+                    disabled={state.isRunning}
+                    onSelect={onSelect}
+                    onClear={onClear}
+                    onValidationError={(message) => {
+                      setValidationError(message)
+                      setIsDemo(false)
+                      setFile(null)
+                      setMeta(null)
+                    }}
+                  />
+                </div>
               </section>
 
-              <section>
-                <SectionLabel className="mb-2">엔진</SectionLabel>
-                <EngineSelector
-                  transcriptionEngine={transcriptionEngine}
-                  refineEngine={refineEngine}
-                  disabled={state.isRunning}
-                  onTranscriptionChange={setTranscriptionEngine}
-                  onRefineChange={setRefineEngine}
-                />
+              <section className="overflow-hidden rounded-xl border border-border bg-card">
+                <RailHeader step="2" title="엔진 설정" description="전사와 요약에 사용할 모델" />
+                <div className="p-3">
+                  <EngineSelector
+                    transcriptionEngine={transcriptionEngine}
+                    refineEngine={refineEngine}
+                    disabled={state.isRunning}
+                    onTranscriptionChange={setTranscriptionEngine}
+                    onRefineChange={setRefineEngine}
+                  />
+                </div>
               </section>
 
               {error && (
@@ -229,9 +242,9 @@ export function NoteApp() {
               </div>
 
               {hasStarted && (
-                <section className="rounded-xl border border-border bg-card p-4">
-                  <SectionLabel>진행 상태</SectionLabel>
-                  <div className="mt-3">
+                <section className="overflow-hidden rounded-xl border border-border bg-card">
+                  <RailHeader step="3" title="진행 상태" description="파이프라인 처리 단계" />
+                  <div className="p-4">
                     <ProgressSteps
                       order={stepOrder}
                       steps={state.steps}
@@ -248,7 +261,7 @@ export function NoteApp() {
               </p>
             </aside>
 
-            <section className="min-h-[420px]">
+            <section className="min-h-[480px]">
               {state.result && meta ? (
                 <ResultsPanel
                   result={state.result}
@@ -257,7 +270,7 @@ export function NoteApp() {
                   changingType={state.changingType}
                 />
               ) : (
-                <EmptyState running={state.isRunning} />
+                <FileEmptyState running={state.isRunning} hasError={Boolean(error)} />
               )}
             </section>
           </div>
@@ -286,23 +299,30 @@ function ModeButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors sm:flex-none ${
+      className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
         active
           ? "bg-secondary text-foreground shadow-sm"
           : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
       }`}
     >
       <span className={active ? "text-brand" : "text-muted-foreground"}>{icon}</span>
-      {label}
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sr-only sm:hidden">{label}</span>
     </button>
   )
 }
 
-function SectionLabel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function RailHeader({ step, title, description }: { step: string; title: string; description: string }) {
   return (
-    <h2 className={`text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ${className}`}>
-      {children}
-    </h2>
+    <div className="flex items-center gap-2.5 border-b border-border bg-surface px-3.5 py-2.5">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-card font-mono text-[10px] font-semibold text-muted-foreground">
+        {step}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-xs font-semibold text-foreground">{title}</h2>
+        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+      </div>
+    </div>
   )
 }
 
@@ -310,24 +330,58 @@ function statusEngineName(label: string) {
   return label.replace(/^AI Gateway · /, "").replace(/^AI Gateway 쨌 /, "").replace(/^Groq · /, "Groq ")
 }
 
-function EmptyState({ running }: { running: boolean }) {
-  return (
-    <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-8 text-center">
-      <div
-        className={`flex size-14 items-center justify-center rounded-full ${
-          running ? "bg-brand-muted text-brand" : "bg-secondary text-muted-foreground"
-        }`}
-      >
-        {running ? <Loader2 className="size-6 animate-spin" /> : <AudioLines className="size-6" />}
+function FileEmptyState({ running, hasError }: { running: boolean; hasError: boolean }) {
+  if (running) {
+    return (
+      <div className="flex h-full min-h-[480px] flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-brand-muted text-brand">
+          <Loader2 className="size-6 animate-spin" />
+        </div>
+        <p className="mt-4 text-sm font-medium text-foreground">노트를 생성하고 있습니다</p>
+        <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
+          전사와 요약이 끝나면 여기에 정리된 노트 문서가 표시됩니다. 진행 상태는 왼쪽 패널에서 확인할 수 있습니다.
+        </p>
       </div>
-      <p className="mt-4 text-sm font-medium text-foreground">
-        {running ? "노트를 생성하고 있습니다" : "아직 결과가 없습니다"}
-      </p>
-      <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
-        {running
-          ? "전사와 요약이 끝나면 여기에 정리된 노트가 표시됩니다."
-          : "음성 · 영상 파일을 업로드하고 전사를 시작하면 정리된 노트가 여기에 표시됩니다."}
-      </p>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-[480px] flex-col rounded-xl border border-dashed border-border bg-card/40">
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+          <FileText className="size-6" />
+        </div>
+        <p className="mt-4 text-sm font-medium text-foreground">
+          {hasError ? "다시 시도할 준비가 되었습니다" : "아직 결과가 없습니다"}
+        </p>
+        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+          음성 · 영상 파일을 업로드하고 전사를 시작하면 요약 · 타임라인 · 핵심 포인트가 담긴 노트 문서가 여기에
+          만들어집니다.
+        </p>
+
+        <div className="mt-8 grid w-full max-w-lg gap-3 sm:grid-cols-3">
+          <EmptyStep icon={<UploadCloud className="size-4" />} title="업로드" description="파일 선택 또는 드래그" />
+          <EmptyStep icon={<Mic className="size-4" />} title="전사" description="음성을 텍스트로 변환" />
+          <EmptyStep icon={<Wand2 className="size-4" />} title="노트 생성" description="유형별 노트로 정리" />
+        </div>
+
+        <p className="mt-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Sparkles className="size-3.5 text-brand" />
+          파일이 없다면 왼쪽의 데모 보기로 전체 흐름을 미리 볼 수 있습니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function EmptyStep({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4">
+      <span className="flex size-8 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+        {icon}
+      </span>
+      <span className="text-xs font-medium text-foreground">{title}</span>
+      <span className="text-center text-[11px] leading-relaxed text-muted-foreground">{description}</span>
     </div>
   )
 }
