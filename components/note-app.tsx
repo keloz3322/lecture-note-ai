@@ -69,7 +69,7 @@ export function NoteApp() {
     if (isDemo) {
       const duration = formatDuration(selectedDemo.meta.durationSeconds)
       return {
-        prepare: `${selectedDemo.label} 데모 샘플을 불러옵니다.${duration ? ` 원본 길이는 ${duration}입니다.` : ""}`,
+        prepare: `${selectedDemo.label} 전체 원본${duration ? `(${duration})` : ""}을 분석해 만든 데모 결과를 불러옵니다.`,
         upload: "발표용 데모라 실제 파일 업로드 없이 준비된 결과 데이터를 불러옵니다.",
         transcribe: `${transcriptionName} 전사 과정을 압축해서 보여줍니다.${demoTimingText(selectedDemo, "transcribe")}`,
         refine: `${refineName} 노트 생성 과정을 압축해서 보여줍니다.${demoTimingText(selectedDemo, "refine")}`,
@@ -130,7 +130,7 @@ export function NoteApp() {
                 Transcript Studio
               </h1>
               <p className="mt-0.5 hidden truncate text-[11px] text-muted-foreground md:block">
-                음성 · 영상 · 실시간 번역을 학습 노트로
+                음성 · 영상 · 실시간 번역을 전사·요약·번역으로 정리
               </p>
             </div>
           </div>
