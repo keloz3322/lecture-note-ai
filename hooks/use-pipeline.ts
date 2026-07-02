@@ -44,6 +44,15 @@ export interface PipelineState {
   changingType: boolean
   /** True while generating a Korean translation for the cleaned transcript. */
   translatingTranscript: boolean
+  translationProgress: { completed: number; total: number } | null
+}
+
+interface TranslationResponse extends Pick<RefineResult, "translatedTranscriptKo" | "translatedTranscriptKoNotice"> {
+  sourceLanguage?: string
+  sourceChars?: number
+  chunkCount?: number
+  completedChunks?: number
+  chunkIndex?: number
 }
 
 function initialSteps(): Record<PipelineStep, StepStatus> {
@@ -80,6 +89,7 @@ export function usePipeline() {
     isRunning: false,
     changingType: false,
     translatingTranscript: false,
+    translationProgress: null,
   })
   const abortRef = useRef(false)
   // Cache the last transcription so we can re-run refine when the user changes
@@ -107,6 +117,7 @@ export function usePipeline() {
       isRunning: false,
       changingType: false,
       translatingTranscript: false,
+      translationProgress: null,
     })
   }, [])
 
@@ -122,6 +133,7 @@ export function usePipeline() {
       isRunning: true,
       changingType: false,
       translatingTranscript: false,
+      translationProgress: null,
     })
 
     const fail = (step: PipelineStep, message: string) => {
@@ -233,6 +245,7 @@ export function usePipeline() {
       isRunning: true,
       changingType: false,
       translatingTranscript: false,
+      translationProgress: null,
     })
 
     const advance = async (step: PipelineStep, delayMs: number) => {
@@ -310,24 +323,59 @@ export function usePipeline() {
     const current = state.result
     if (!current?.cleanedTranscript || current.translatedTranscriptKo) return
 
-    setState((prev) => ({ ...prev, translatingTranscript: true, error: null }))
+    setState((prev) => ({ ...prev, translatingTranscript: true, translationProgress: null, error: null }))
     try {
-      const translated = await postJson<
-        Pick<RefineResult, "translatedTranscriptKo" | "translatedTranscriptKoNotice">
-      >("/api/translate-transcript", {
+      const plan = await postJson<TranslationResponse>("/api/translate-transcript", {
         text: current.cleanedTranscript,
         contentType: current.contentType,
         engine: lastRefineEngineRef.current,
+        mode: "plan",
       })
+
+      if (plan.translatedTranscriptKo) {
+        setState((prev) => ({
+          ...prev,
+          result: prev.result ? { ...prev.result, ...pickTranslation(plan) } : prev.result,
+          translatingTranscript: false,
+          translationProgress: null,
+        }))
+        return
+      }
+
+      const total = Math.max(1, plan.chunkCount ?? 1)
+      const translatedChunks: string[] = []
+
+      for (let index = 0; index < total; index++) {
+        if (abortRef.current) return
+        setState((prev) => ({ ...prev, translationProgress: { completed: index, total } }))
+        const chunk = await postJson<TranslationResponse>("/api/translate-transcript", {
+          text: current.cleanedTranscript,
+          contentType: current.contentType,
+          engine: lastRefineEngineRef.current,
+          mode: "chunk",
+          chunkIndex: index,
+        })
+        translatedChunks[index] = chunk.translatedTranscriptKo ?? ""
+        setState((prev) => ({ ...prev, translationProgress: { completed: index + 1, total } }))
+      }
+
+      const translated = {
+        translatedTranscriptKo: translatedChunks.join("\n\n").trim(),
+        translatedTranscriptKoNotice:
+          total > 1 ? `정리된 전사문 전체를 ${total}개 조각으로 나누어 번역했습니다.` : undefined,
+      }
+
       setState((prev) => ({
         ...prev,
         result: prev.result ? { ...prev.result, ...translated } : prev.result,
         translatingTranscript: false,
+        translationProgress: null,
       }))
     } catch (e) {
       setState((prev) => ({
         ...prev,
         translatingTranscript: false,
+        translationProgress: null,
         error: toMessage(e, "한국어 번역본을 생성하지 못했습니다."),
       }))
     }
@@ -343,4 +391,11 @@ function wait(ms: number) {
 function toMessage(e: unknown, fallback: string): string {
   if (e instanceof Error && e.message) return e.message
   return fallback
+}
+
+function pickTranslation(response: TranslationResponse): Pick<RefineResult, "translatedTranscriptKo" | "translatedTranscriptKoNotice"> {
+  return {
+    translatedTranscriptKo: response.translatedTranscriptKo,
+    translatedTranscriptKoNotice: response.translatedTranscriptKoNotice,
+  }
 }

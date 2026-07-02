@@ -301,6 +301,7 @@ export function NoteApp() {
                   changingType={state.changingType}
                   onTranslateTranscript={translateTranscript}
                   translatingTranscript={state.translatingTranscript}
+                  translationProgress={state.translationProgress}
                 />
               ) : (
                 <FileEmptyState running={state.isRunning} hasError={Boolean(error)} />

@@ -31,6 +31,7 @@ interface ResultsPanelProps {
   onTranslateTranscript?: () => void
   /** True while Korean transcript translation is in flight. */
   translatingTranscript?: boolean
+  translationProgress?: { completed: number; total: number } | null
   /** Render without the outer card frame (when embedded in a parent card). */
   frameless?: boolean
 }
@@ -50,6 +51,7 @@ export function ResultsPanel({
   changingType,
   onTranslateTranscript,
   translatingTranscript,
+  translationProgress,
   frameless,
 }: ResultsPanelProps) {
   const [view, setView] = useState<ViewKey>("note")
@@ -202,6 +204,7 @@ export function ResultsPanel({
             text={result.translatedTranscriptKo}
             notice={result.translatedTranscriptKoNotice}
             isLoading={Boolean(translatingTranscript)}
+            progress={translationProgress}
             onRequest={onTranslateTranscript}
           />
         )}
@@ -504,11 +507,13 @@ function KoreanTranslationView({
   text,
   notice,
   isLoading,
+  progress,
   onRequest,
 }: {
   text?: string
   notice?: string
   isLoading: boolean
+  progress?: { completed: number; total: number } | null
   onRequest?: () => void
 }) {
   return (
@@ -545,8 +550,13 @@ function KoreanTranslationView({
               className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
-              {isLoading ? "번역 생성 중..." : "한국어 번역 생성"}
+              {isLoading && progress ? `번역 생성 중 (${progress.completed}/${progress.total})` : isLoading ? "번역 생성 중..." : "한국어 번역 생성"}
             </button>
+            {isLoading && progress && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                전체 {progress.total}개 조각 중 {progress.completed}개 번역 완료
+              </p>
+            )}
           </div>
         )}
       </section>

@@ -11,9 +11,8 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 const GEMINI_THINKING_LEVEL = "medium"
 const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
-const TRANSLATION_CHUNK_CHAR_LIMIT = 9000
-const MAX_TRANSLATION_CHUNKS = 8
-const TRANSLATION_TOTAL_CHAR_LIMIT = TRANSLATION_CHUNK_CHAR_LIMIT * MAX_TRANSLATION_CHUNKS
+const TRANSLATION_CHUNK_CHAR_LIMIT = 6000
+const MAX_INLINE_TRANSLATION_CHUNKS = 4
 
 const translationZodSchema = z.object({
   sourceLanguage: z.string(),
@@ -46,6 +45,8 @@ export async function POST(request: Request) {
       text?: string
       engine?: string
       contentType?: string
+      mode?: "plan" | "chunk" | "all"
+      chunkIndex?: number
     }
 
     const text = getText(body.text)
@@ -57,12 +58,54 @@ export async function POST(request: Request) {
       return NextResponse.json({
         translatedTranscriptKo: text,
         translatedTranscriptKoNotice: "정리된 전사문이 이미 한국어라 같은 내용을 표시합니다.",
+        sourceLanguage: "Korean",
+        chunkCount: 1,
+        completedChunks: 1,
       })
     }
 
     const engine = getRefineEngine(body.engine)
     const contentTypeLabel = isContentTypeId(body.contentType) ? getContentType(body.contentType).label : "일반"
-    const { chunks, truncated } = splitTranscript(text)
+    const chunks = splitTranscript(text)
+    const mode = body.mode === "plan" || body.mode === "chunk" ? body.mode : "all"
+
+    if (mode === "plan") {
+      return NextResponse.json({
+        chunkCount: chunks.length,
+        chunkCharLimit: TRANSLATION_CHUNK_CHAR_LIMIT,
+        sourceChars: text.length,
+      })
+    }
+
+    if (mode === "chunk") {
+      const chunkIndex = getChunkIndex(body.chunkIndex, chunks.length)
+      const output = await translateChunk(engine, {
+        chunk: chunks[chunkIndex],
+        index: chunkIndex,
+        total: chunks.length,
+        contentTypeLabel,
+      })
+
+      return NextResponse.json({
+        ...output,
+        chunkIndex,
+        chunkCount: chunks.length,
+        completedChunks: chunkIndex + 1,
+      })
+    }
+
+    if (chunks.length > MAX_INLINE_TRANSLATION_CHUNKS) {
+      return NextResponse.json(
+        {
+          error: "긴 전사문은 조각 번역 모드로 요청해 주세요.",
+          chunkCount: chunks.length,
+          chunkCharLimit: TRANSLATION_CHUNK_CHAR_LIMIT,
+          sourceChars: text.length,
+        },
+        { status: 409 },
+      )
+    }
+
     const translatedChunks: string[] = []
     let sourceLanguage = ""
 
@@ -79,12 +122,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       translatedTranscriptKo: translatedChunks.join("\n\n").trim(),
-      translatedTranscriptKoNotice: truncated
-        ? `긴 전사문이라 현재 한국어 번역본은 앞부분 약 ${TRANSLATION_TOTAL_CHAR_LIMIT.toLocaleString(
-            "ko-KR",
-          )}자 기준으로 생성했습니다. 원문 전사문 전체는 그대로 보존됩니다.`
-        : undefined,
+      translatedTranscriptKoNotice:
+        chunks.length > 1 ? `정리된 전사문 전체를 ${chunks.length}개 조각으로 나누어 번역했습니다.` : undefined,
       sourceLanguage: sourceLanguage || undefined,
+      chunkCount: chunks.length,
+      completedChunks: chunks.length,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "한국어 번역본을 생성하지 못했습니다."
@@ -179,22 +221,33 @@ ${chunk}`
 }
 
 function splitTranscript(text: string) {
-  const source = text.length > TRANSLATION_TOTAL_CHAR_LIMIT ? text.slice(0, TRANSLATION_TOTAL_CHAR_LIMIT) : text
   const chunks: string[] = []
   let cursor = 0
 
-  while (cursor < source.length) {
-    const hardEnd = Math.min(source.length, cursor + TRANSLATION_CHUNK_CHAR_LIMIT)
-    const slice = source.slice(cursor, hardEnd)
-    const softBreak = Math.max(slice.lastIndexOf("\n\n"), slice.lastIndexOf(". "), slice.lastIndexOf("? "))
+  while (cursor < text.length) {
+    const hardEnd = Math.min(text.length, cursor + TRANSLATION_CHUNK_CHAR_LIMIT)
+    const slice = text.slice(cursor, hardEnd)
+    const softBreak = Math.max(
+      slice.lastIndexOf("\n\n"),
+      slice.lastIndexOf(". "),
+      slice.lastIndexOf("? "),
+      slice.lastIndexOf("! "),
+    )
     const end =
-      hardEnd < source.length && softBreak > TRANSLATION_CHUNK_CHAR_LIMIT * 0.55 ? cursor + softBreak + 1 : hardEnd
-    const chunk = source.slice(cursor, end).trim()
+      hardEnd < text.length && softBreak > TRANSLATION_CHUNK_CHAR_LIMIT * 0.55 ? cursor + softBreak + 1 : hardEnd
+    const chunk = text.slice(cursor, end).trim()
     if (chunk) chunks.push(chunk)
     cursor = end
   }
 
-  return { chunks, truncated: text.length > source.length }
+  return chunks
+}
+
+function getChunkIndex(value: unknown, chunkCount: number) {
+  if (!Number.isInteger(value)) throw new Error("번역 조각 번호가 올바르지 않습니다.")
+  const index = Number(value)
+  if (index < 0 || index >= chunkCount) throw new Error("번역 조각 번호가 범위를 벗어났습니다.")
+  return index
 }
 
 function isMostlyKorean(text: string) {
