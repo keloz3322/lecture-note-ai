@@ -37,7 +37,7 @@ import { UploadPanel } from "./upload-panel"
 type WorkflowMode = "file" | "live"
 
 export function NoteApp() {
-  const { state, run, runDemo, reset, changeContentType, stepOrder } = usePipeline()
+  const { state, run, runDemo, reset, changeContentType, translateTranscript, stepOrder } = usePipeline()
   const [mode, setMode] = useState<WorkflowMode>("live")
   const [file, setFile] = useState<File | null>(null)
   const [meta, setMeta] = useState<AudioFileMeta | null>(null)
@@ -299,6 +299,8 @@ export function NoteApp() {
                   fileName={meta.name}
                   onChangeType={changeContentType}
                   changingType={state.changingType}
+                  onTranslateTranscript={translateTranscript}
+                  translatingTranscript={state.translatingTranscript}
                 />
               ) : (
                 <FileEmptyState running={state.isRunning} hasError={Boolean(error)} />

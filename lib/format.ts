@@ -66,6 +66,16 @@ export function buildMarkdown(result: RefineResult, fileName: string): string {
   lines.push("")
   lines.push(result.cleanedTranscript)
   lines.push("")
+  if (result.translatedTranscriptKo) {
+    lines.push("## 한국어 번역본")
+    lines.push("")
+    if (result.translatedTranscriptKoNotice) {
+      lines.push(`> ${result.translatedTranscriptKoNotice}`)
+      lines.push("")
+    }
+    lines.push(result.translatedTranscriptKo)
+    lines.push("")
+  }
   return lines.join("\n")
 }
 
@@ -106,6 +116,14 @@ export function buildPlainText(result: RefineResult, fileName: string): string {
   lines.push("[ 정리된 전사문 ]")
   lines.push(result.cleanedTranscript)
   lines.push("")
+  if (result.translatedTranscriptKo) {
+    lines.push("[ 한국어 번역본 ]")
+    if (result.translatedTranscriptKoNotice) {
+      lines.push(result.translatedTranscriptKoNotice)
+    }
+    lines.push(result.translatedTranscriptKo)
+    lines.push("")
+  }
   return lines.join("\n")
 }
 

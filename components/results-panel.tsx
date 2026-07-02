@@ -7,7 +7,9 @@ import {
   Clock3,
   Download,
   FileText,
+  Languages,
   ListChecks,
+  Loader2,
   PencilLine,
   ScrollText,
   Sparkles,
@@ -25,11 +27,15 @@ interface ResultsPanelProps {
   onChangeType?: (type: ContentTypeId) => void
   /** True while a type-change refine is in flight. */
   changingType?: boolean
+  /** Generate a Korean translation for a non-Korean cleaned transcript. */
+  onTranslateTranscript?: () => void
+  /** True while Korean transcript translation is in flight. */
+  translatingTranscript?: boolean
   /** Render without the outer card frame (when embedded in a parent card). */
   frameless?: boolean
 }
 
-type ViewKey = "note" | "timeline" | "transcript"
+type ViewKey = "note" | "timeline" | "transcript" | "translation"
 
 /** User edits layered over the AI result. Reset whenever a new result arrives. */
 interface ResultEdits {
@@ -37,11 +43,23 @@ interface ResultEdits {
   transcript?: string
 }
 
-export function ResultsPanel({ result, fileName, onChangeType, changingType, frameless }: ResultsPanelProps) {
+export function ResultsPanel({
+  result,
+  fileName,
+  onChangeType,
+  changingType,
+  onTranslateTranscript,
+  translatingTranscript,
+  frameless,
+}: ResultsPanelProps) {
   const [view, setView] = useState<ViewKey>("note")
   const [edits, setEdits] = useState<ResultEdits>({})
   const baseName = useMemo(() => fileName.replace(/\.[^.]+$/, ""), [fileName])
   const timelineAvailable = result.timestampStatus === "available" || result.timestampStatus === "estimated"
+  const summaryText = edits.summary ?? result.summary
+  const transcriptText = edits.transcript ?? result.cleanedTranscript
+  const edited = edits.summary !== undefined || edits.transcript !== undefined
+  const translationOffered = Boolean(result.translatedTranscriptKo) || shouldOfferKoreanTranslation(transcriptText)
 
   // A fresh AI result invalidates local edits and any view that no longer applies.
   useEffect(() => {
@@ -50,11 +68,8 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType, fra
 
   useEffect(() => {
     if (view === "timeline" && !timelineAvailable) setView("note")
-  }, [view, timelineAvailable])
-
-  const summaryText = edits.summary ?? result.summary
-  const transcriptText = edits.transcript ?? result.cleanedTranscript
-  const edited = edits.summary !== undefined || edits.transcript !== undefined
+    if (view === "translation" && !translationOffered) setView("transcript")
+  }, [view, timelineAvailable, translationOffered])
 
   /** Result with user edits applied, used for copy and export. */
   const exportResult = useMemo<RefineResult>(
@@ -139,9 +154,17 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType, fra
           icon={ScrollText}
           label="정리된 전사문"
         />
+        {translationOffered && (
+          <ViewButton
+            active={view === "translation"}
+            onClick={() => setView("translation")}
+            icon={Languages}
+            label="한국어 번역본"
+          />
+        )}
       </div>
 
-      {result.timelineNotice && view !== "transcript" && (
+      {result.timelineNotice && (view === "note" || view === "timeline") && (
         <div className="flex items-start gap-2 border-b border-border bg-secondary/30 px-4 py-2.5 text-xs leading-relaxed text-muted-foreground">
           <Clock3 className="mt-0.5 size-3.5 shrink-0" />
           <span>{result.timelineNotice}</span>
@@ -172,6 +195,14 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType, fra
                 value === result.cleanedTranscript ? { ...prev, transcript: undefined } : { ...prev, transcript: value },
               )
             }
+          />
+        )}
+        {view === "translation" && (
+          <KoreanTranslationView
+            text={result.translatedTranscriptKo}
+            notice={result.translatedTranscriptKoNotice}
+            isLoading={Boolean(translatingTranscript)}
+            onRequest={onTranslateTranscript}
           />
         )}
       </div>
@@ -469,6 +500,60 @@ function TranscriptView({
   )
 }
 
+function KoreanTranslationView({
+  text,
+  notice,
+  isLoading,
+  onRequest,
+}: {
+  text?: string
+  notice?: string
+  isLoading: boolean
+  onRequest?: () => void
+}) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+      <section>
+        <div className="flex items-center gap-2 border-b border-border pb-2">
+          <Languages className="size-4 text-muted-foreground" aria-hidden />
+          <h3 className="text-sm font-semibold text-card-foreground">한국어 번역본</h3>
+          <div className="ml-auto flex items-center gap-1.5">
+            {text && <CopyButton getText={() => text} label="복사" />}
+          </div>
+        </div>
+        {notice && (
+          <p className="mt-3 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {notice}
+          </p>
+        )}
+        {text ? (
+          <div className="mt-4 space-y-3.5 text-[15px] leading-7 text-card-foreground">
+            {text.split("\n\n").map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-dashed border-border bg-background/50 p-6 text-center">
+            <p className="text-sm font-medium text-foreground">한국어 번역본이 아직 없습니다</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+              영어 등 다른 언어의 정리된 전사문을 원문 옆에 둘 수 있는 한국어 번역본으로 생성합니다.
+            </p>
+            <button
+              type="button"
+              disabled={!onRequest || isLoading}
+              onClick={onRequest}
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
+              {isLoading ? "번역 생성 중..." : "한국어 번역 생성"}
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
 function SectionContent({ section }: { section: RefineSection }) {
   if (section.items.length === 0) {
     return <p className="text-sm text-muted-foreground">{section.title} 항목이 없습니다.</p>
@@ -516,6 +601,8 @@ function getViewText(result: RefineResult, view: ViewKey, sections: RefineSectio
         .join("\n")
     case "transcript":
       return result.cleanedTranscript
+    case "translation":
+      return result.translatedTranscriptKo ?? ""
     case "note": {
       const lines: string[] = [result.summary, ""]
       lines.push(`[ ${getCoreLabel(result.contentType, "keyPoints")} ]`)
@@ -530,4 +617,10 @@ function getViewText(result: RefineResult, view: ViewKey, sections: RefineSectio
       return lines.join("\n")
     }
   }
+}
+
+function shouldOfferKoreanTranslation(text: string) {
+  const korean = (text.match(/[\uac00-\ud7a3]/g) ?? []).length
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length
+  return latin > 40 && korean < latin * 0.35
 }

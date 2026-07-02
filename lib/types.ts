@@ -133,6 +133,10 @@ export interface RefineResult {
   /** Reader-facing note shown when timeline generation is unavailable or estimated. */
   timelineNotice?: string
   cleanedTranscript: string
+  /** Optional Korean translation of cleanedTranscript for non-Korean transcripts. */
+  translatedTranscriptKo?: string
+  /** Reader-facing note when the Korean translation is partial or otherwise special. */
+  translatedTranscriptKoNotice?: string
   summary: string
   timeline: TimelineItem[]
   keyPoints: string[]

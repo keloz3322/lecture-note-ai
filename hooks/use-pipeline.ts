@@ -42,6 +42,8 @@ export interface PipelineState {
   isRunning: boolean
   /** True while re-running refine for a manually selected content type. */
   changingType: boolean
+  /** True while generating a Korean translation for the cleaned transcript. */
+  translatingTranscript: boolean
 }
 
 function initialSteps(): Record<PipelineStep, StepStatus> {
@@ -77,6 +79,7 @@ export function usePipeline() {
     result: null,
     isRunning: false,
     changingType: false,
+    translatingTranscript: false,
   })
   const abortRef = useRef(false)
   // Cache the last transcription so we can re-run refine when the user changes
@@ -103,6 +106,7 @@ export function usePipeline() {
       result: null,
       isRunning: false,
       changingType: false,
+      translatingTranscript: false,
     })
   }, [])
 
@@ -117,6 +121,7 @@ export function usePipeline() {
       result: null,
       isRunning: true,
       changingType: false,
+      translatingTranscript: false,
     })
 
     const fail = (step: PipelineStep, message: string) => {
@@ -227,6 +232,7 @@ export function usePipeline() {
       result: null,
       isRunning: true,
       changingType: false,
+      translatingTranscript: false,
     })
 
     const advance = async (step: PipelineStep, delayMs: number) => {
@@ -280,7 +286,17 @@ export function usePipeline() {
         contentType,
         engine: lastRefineEngineRef.current,
       })
-      setState((prev) => ({ ...prev, result: refined, changingType: false }))
+      setState((prev) => {
+        const previous = prev.result
+        const translation =
+          previous?.cleanedTranscript === refined.cleanedTranscript
+            ? {
+                translatedTranscriptKo: previous.translatedTranscriptKo,
+                translatedTranscriptKoNotice: previous.translatedTranscriptKoNotice,
+              }
+            : {}
+        return { ...prev, result: { ...refined, ...translation }, changingType: false }
+      })
     } catch (e) {
       setState((prev) => ({
         ...prev,
@@ -290,7 +306,34 @@ export function usePipeline() {
     }
   }, [])
 
-  return { state, run, runDemo, reset, changeContentType, stepOrder: STEP_ORDER }
+  const translateTranscript = useCallback(async () => {
+    const current = state.result
+    if (!current?.cleanedTranscript || current.translatedTranscriptKo) return
+
+    setState((prev) => ({ ...prev, translatingTranscript: true, error: null }))
+    try {
+      const translated = await postJson<
+        Pick<RefineResult, "translatedTranscriptKo" | "translatedTranscriptKoNotice">
+      >("/api/translate-transcript", {
+        text: current.cleanedTranscript,
+        contentType: current.contentType,
+        engine: lastRefineEngineRef.current,
+      })
+      setState((prev) => ({
+        ...prev,
+        result: prev.result ? { ...prev.result, ...translated } : prev.result,
+        translatingTranscript: false,
+      }))
+    } catch (e) {
+      setState((prev) => ({
+        ...prev,
+        translatingTranscript: false,
+        error: toMessage(e, "한국어 번역본을 생성하지 못했습니다."),
+      }))
+    }
+  }, [state.result])
+
+  return { state, run, runDemo, reset, changeContentType, translateTranscript, stepOrder: STEP_ORDER }
 }
 
 function wait(ms: number) {
