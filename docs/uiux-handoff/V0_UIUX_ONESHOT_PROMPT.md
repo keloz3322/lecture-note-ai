@@ -9,6 +9,19 @@ Before editing, read:
 
 Goal: dramatically improve the UI/UX quality of the current Transcript Studio product using the handoff as reference, while preserving the working product behavior.
 
+Ambition level:
+
+- Be bold. This should be a major UI/UX redesign pass, not a light polish pass.
+- Rework layout hierarchy, workspace structure, information density, result readability, and interaction states where needed.
+- Treat `docs/uiux-handoff/UIUX_Agent_Brief.md` as the primary design brief and use it aggressively.
+- Translate the references into a real production interface:
+  - Notion-like document workspace structure,
+  - Otter-like transcript review with timestamped rows and media/player context,
+  - AI note-taker style summary-first results,
+  - editable/reviewable AI output rather than static generated text.
+- It is acceptable to substantially restructure the UI components if the existing product flows and backend contracts remain intact.
+- Do not merely change colors, radii, shadows, or spacing. The outcome should feel like a more mature product.
+
 Important product reality:
 
 - This is already a functioning app, not a blank prototype.
@@ -24,6 +37,8 @@ Design direction:
 
 - Raise the app from a functional tool to a polished desktop-first AI document workspace.
 - Use the handoff references for structure: Notion-like document workspace, Otter-like timestamped transcript review, summary-first AI notes, and editable/reviewable AI output.
+- Make reference influence visible in the interaction model, not just the color palette.
+- Prefer real workflow surfaces: project/session context, source controls, transcript lanes, note editor, metadata, export, and review states.
 - Keep the first screen as the working product UI, not a marketing landing page.
 - Prefer a calm, dense, readable SaaS interface over a decorative hero page.
 - Avoid large gradients, decorative blobs, purple-heavy AI styling, and generic dashboard cards.
@@ -81,12 +96,13 @@ Files likely relevant:
 Please do this as one coherent UI/UX pass:
 
 1. Inspect the current app structure and understand existing state/props before editing.
-2. Redesign the shell, layout hierarchy, visual system, and key states.
-3. Preserve all core product flows.
-4. Keep the current Korean product copy where it is accurate, but improve labels when clearer.
-5. Verify the app compiles.
-6. Run the available local checks, at minimum TypeScript and build if possible.
-7. Commit your changes to a v0 branch with a clear commit message.
+2. Read the handoff brief and explicitly map its reference ideas into this app.
+3. Redesign the shell, layout hierarchy, visual system, and key states.
+4. Preserve all core product flows.
+5. Keep the current Korean product copy where it is accurate, but improve labels when clearer.
+6. Verify the app compiles.
+7. Run the available local checks, at minimum TypeScript and build if possible.
+8. Commit your changes to a v0 branch with a clear commit message.
 
 Acceptance checklist:
 
