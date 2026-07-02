@@ -9,7 +9,6 @@ import {
   RotateCcw,
   Sparkles,
   Square,
-  Volume2,
   Wand2,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -24,6 +23,7 @@ import { ResultsPanel } from "./results-panel"
 
 const SESSION_FILE_NAME = "실시간 번역 세션.txt"
 const LIVE_DEMO_AUDIO_SRC = "/demo/live-english-nps-wilkinson-trail-intro-19s.opus"
+const LIVE_DEMO_AUDIO_DELAY_MS = 1500
 type NoteSource = "source" | "translation" | "both"
 
 const NOTE_SOURCE_LABELS: Record<NoteSource, string> = {
@@ -36,12 +36,12 @@ export function LiveTranslatePanel() {
   const live = useLiveTranslate()
   const noteSectionRef = useRef<HTMLDivElement>(null)
   const demoAudioRef = useRef<HTMLAudioElement>(null)
+  const demoAudioTimerRef = useRef<number | null>(null)
   const [targetLanguageCode, setTargetLanguageCode] = useState<LiveTranslateLanguageCode>("ko")
   const [echoTargetLanguage, setEchoTargetLanguage] = useState(true)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
   const [pendingNoteSource, setPendingNoteSource] = useState<NoteSource | null>(null)
   const [autoScrollTranscript, setAutoScrollTranscript] = useState(true)
-  const [showDemoAudio, setShowDemoAudio] = useState(false)
 
   const isActive = live.status === "connecting" || live.status === "listening" || live.status === "stopping"
   const isRefining = live.status === "refining"
@@ -63,7 +63,14 @@ export function LiveTranslatePanel() {
     }
   }
 
+  function clearDemoAudioTimer() {
+    if (demoAudioTimerRef.current === null) return
+    window.clearTimeout(demoAudioTimerRef.current)
+    demoAudioTimerRef.current = null
+  }
+
   function stopDemoAudio(resetTime = true) {
+    clearDemoAudioTimer()
     const audio = demoAudioRef.current
     if (!audio) return
     audio.pause()
@@ -78,13 +85,20 @@ export function LiveTranslatePanel() {
     try {
       await audio.play()
     } catch {
-      // If the browser blocks playback, the visible controls let the presenter start it manually.
+      // Browser policies can still block audio in some environments; the text demo continues either way.
     }
+  }
+
+  function scheduleDemoAudio() {
+    clearDemoAudioTimer()
+    demoAudioTimerRef.current = window.setTimeout(() => {
+      demoAudioTimerRef.current = null
+      void playDemoAudio()
+    }, LIVE_DEMO_AUDIO_DELAY_MS)
   }
 
   function handleStart() {
     stopDemoAudio()
-    setShowDemoAudio(false)
     void live.start({ targetLanguageCode, echoTargetLanguage })
   }
 
@@ -94,14 +108,12 @@ export function LiveTranslatePanel() {
   }
 
   function handleDemo() {
-    setShowDemoAudio(true)
     live.runDemo()
-    void playDemoAudio()
+    scheduleDemoAudio()
   }
 
   function handleReset() {
     stopDemoAudio()
-    setShowDemoAudio(false)
     live.reset()
   }
 
@@ -152,21 +164,7 @@ export function LiveTranslatePanel() {
             </button>
           </div>
 
-          <div
-            className={`flex min-w-0 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 ${
-              showDemoAudio ? "" : "sr-only"
-            }`}
-          >
-            <Volume2 className="size-3.5 shrink-0 text-brand" aria-hidden />
-            <span className="hidden shrink-0 text-xs font-medium text-muted-foreground sm:inline">데모 음성</span>
-            <audio
-              ref={demoAudioRef}
-              src={LIVE_DEMO_AUDIO_SRC}
-              preload="metadata"
-              controls
-              className="h-8 w-[190px] max-w-[45vw]"
-            />
-          </div>
+          <audio ref={demoAudioRef} src={LIVE_DEMO_AUDIO_SRC} preload="auto" className="hidden" aria-hidden="true" />
 
           <StatusLine status={live.status} targetLanguageCode={live.targetLanguageCode || targetLanguageCode} />
 

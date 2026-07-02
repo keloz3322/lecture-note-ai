@@ -73,8 +73,8 @@ interface LiveDemoData {
 }
 
 const LIVE_DEMO = liveDemoResult as LiveDemoData
-const LIVE_DEMO_START_DELAY_MS = 2000
-const LIVE_DEMO_SECONDS_TO_MS = 900
+const LIVE_DEMO_AUDIO_DELAY_MS = 1500
+const LIVE_DEMO_SECONDS_TO_MS = 1000
 const LIVE_DEMO_REFINE_DELAY_MS = 4000
 
 export function useLiveTranslate() {
@@ -357,10 +357,8 @@ export function useLiveTranslate() {
       ...demo.session.sourceChunks.map((chunk) => ({ kind: "source" as const, chunk })),
       ...demo.session.translationChunks.map((chunk) => ({ kind: "translation" as const, chunk })),
     ].sort((a, b) => a.chunk.receivedAtSeconds - b.chunk.receivedAtSeconds)
-    const firstSecond = events[0]?.chunk.receivedAtSeconds ?? 0
     const lastDelay =
-      LIVE_DEMO_START_DELAY_MS +
-      Math.max(0, (events.at(-1)?.chunk.receivedAtSeconds ?? firstSecond) - firstSecond) * LIVE_DEMO_SECONDS_TO_MS
+      LIVE_DEMO_AUDIO_DELAY_MS + Math.max(0, events.at(-1)?.chunk.receivedAtSeconds ?? 0) * LIVE_DEMO_SECONDS_TO_MS
 
     isDemoRef.current = true
     noteSourceRef.current = "translation"
@@ -378,11 +376,10 @@ export function useLiveTranslate() {
       demoTimersRef.current.push(timer)
     }
 
-    schedule(LIVE_DEMO_START_DELAY_MS, () => setStatus("listening"))
+    schedule(LIVE_DEMO_AUDIO_DELAY_MS, () => setStatus("listening"))
 
     events.forEach(({ kind, chunk }, index) => {
-      const delay =
-        LIVE_DEMO_START_DELAY_MS + Math.max(0, chunk.receivedAtSeconds - firstSecond) * LIVE_DEMO_SECONDS_TO_MS
+      const delay = LIVE_DEMO_AUDIO_DELAY_MS + Math.max(0, chunk.receivedAtSeconds) * LIVE_DEMO_SECONDS_TO_MS
       schedule(delay, () => {
         const demoChunk = { ...chunk, id: `${kind}-demo-${index}` }
         const normalized = normalizeTranscriptPiece(demoChunk.text)
