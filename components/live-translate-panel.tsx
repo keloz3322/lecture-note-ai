@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Sparkles,
   Square,
+  Volume2,
   Wand2,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -22,6 +23,7 @@ import { useLiveTranslate } from "@/hooks/use-live-translate"
 import { ResultsPanel } from "./results-panel"
 
 const SESSION_FILE_NAME = "실시간 번역 세션.txt"
+const LIVE_DEMO_AUDIO_SRC = "/demo/live-english-nps-wilkinson-trail-intro-19s.opus"
 type NoteSource = "source" | "translation" | "both"
 
 const NOTE_SOURCE_LABELS: Record<NoteSource, string> = {
@@ -33,11 +35,13 @@ const NOTE_SOURCE_LABELS: Record<NoteSource, string> = {
 export function LiveTranslatePanel() {
   const live = useLiveTranslate()
   const noteSectionRef = useRef<HTMLDivElement>(null)
+  const demoAudioRef = useRef<HTMLAudioElement>(null)
   const [targetLanguageCode, setTargetLanguageCode] = useState<LiveTranslateLanguageCode>("ko")
   const [echoTargetLanguage, setEchoTargetLanguage] = useState(true)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
   const [pendingNoteSource, setPendingNoteSource] = useState<NoteSource | null>(null)
   const [autoScrollTranscript, setAutoScrollTranscript] = useState(true)
+  const [showDemoAudio, setShowDemoAudio] = useState(false)
 
   const isActive = live.status === "connecting" || live.status === "listening" || live.status === "stopping"
   const isRefining = live.status === "refining"
@@ -59,6 +63,48 @@ export function LiveTranslatePanel() {
     }
   }
 
+  function stopDemoAudio(resetTime = true) {
+    const audio = demoAudioRef.current
+    if (!audio) return
+    audio.pause()
+    if (resetTime) audio.currentTime = 0
+  }
+
+  async function playDemoAudio() {
+    const audio = demoAudioRef.current
+    if (!audio) return
+    audio.currentTime = 0
+    audio.volume = 1
+    try {
+      await audio.play()
+    } catch {
+      // If the browser blocks playback, the visible controls let the presenter start it manually.
+    }
+  }
+
+  function handleStart() {
+    stopDemoAudio()
+    setShowDemoAudio(false)
+    void live.start({ targetLanguageCode, echoTargetLanguage })
+  }
+
+  function handleStop() {
+    stopDemoAudio(false)
+    live.stop()
+  }
+
+  function handleDemo() {
+    setShowDemoAudio(true)
+    live.runDemo()
+    void playDemoAudio()
+  }
+
+  function handleReset() {
+    stopDemoAudio()
+    setShowDemoAudio(false)
+    live.reset()
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {/* Session control bar */}
@@ -68,7 +114,7 @@ export function LiveTranslatePanel() {
             {!isActive ? (
               <button
                 type="button"
-                onClick={() => live.start({ targetLanguageCode, echoTargetLanguage })}
+                onClick={handleStart}
                 disabled={isRefining}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -78,7 +124,7 @@ export function LiveTranslatePanel() {
             ) : (
               <button
                 type="button"
-                onClick={live.stop}
+                onClick={handleStop}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-sm transition-opacity hover:opacity-90"
               >
                 <Square className="size-4" />
@@ -87,7 +133,7 @@ export function LiveTranslatePanel() {
             )}
             <button
               type="button"
-              onClick={live.runDemo}
+              onClick={handleDemo}
               disabled={isActive || isRefining}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -96,7 +142,7 @@ export function LiveTranslatePanel() {
             </button>
             <button
               type="button"
-              onClick={live.reset}
+              onClick={handleReset}
               disabled={isActive || isRefining}
               className="inline-flex items-center justify-center rounded-lg border border-border bg-card px-2.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="세션 초기화"
@@ -104,6 +150,22 @@ export function LiveTranslatePanel() {
             >
               <RotateCcw className="size-4" />
             </button>
+          </div>
+
+          <div
+            className={`flex min-w-0 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 ${
+              showDemoAudio ? "" : "sr-only"
+            }`}
+          >
+            <Volume2 className="size-3.5 shrink-0 text-brand" aria-hidden />
+            <span className="hidden shrink-0 text-xs font-medium text-muted-foreground sm:inline">데모 음성</span>
+            <audio
+              ref={demoAudioRef}
+              src={LIVE_DEMO_AUDIO_SRC}
+              preload="metadata"
+              controls
+              className="h-8 w-[190px] max-w-[45vw]"
+            />
           </div>
 
           <StatusLine status={live.status} targetLanguageCode={live.targetLanguageCode || targetLanguageCode} />
