@@ -15,21 +15,7 @@ export const metadata: Metadata = {
     '강의, 회의, 인터뷰, 팟캐스트 등 어떤 음성·영상이든 업로드하면 전사하고 AI로 교정·요약해 콘텐츠 유형에 맞는 노트로 정리해주는 도구.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/icon.svg',
   },
 }
 

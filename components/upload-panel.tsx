@@ -63,9 +63,9 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
     const duration = formatDuration(meta.durationSeconds)
     const extensionLabel = getExtension(meta.name) || meta.type.split("/").pop() || "audio"
     return (
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-muted text-brand">
             <FileAudio className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -114,11 +114,15 @@ export function UploadPanel({ file, meta, disabled, onSelect, onClear, onValidat
         if ((e.key === "Enter" || e.key === " ") && !disabled) inputRef.current?.click()
       }}
       aria-disabled={disabled}
-      className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10 text-center transition-colors ${
-        dragging ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/50"
+      className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center transition-colors ${
+        dragging ? "border-brand bg-brand-muted" : "border-border bg-card hover:border-muted-foreground/50 hover:bg-secondary/30"
       } ${disabled ? "pointer-events-none opacity-60" : ""}`}
     >
-      <div className="flex size-11 items-center justify-center rounded-full bg-secondary text-foreground">
+      <div
+        className={`flex size-11 items-center justify-center rounded-full transition-colors ${
+          dragging ? "bg-brand-muted text-brand" : "bg-secondary text-foreground"
+        }`}
+      >
         <UploadCloud className="size-5" />
       </div>
       <p className="mt-3 text-sm font-medium text-foreground">오디오 / 영상 파일 업로드</p>

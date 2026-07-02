@@ -22,7 +22,7 @@ export function EngineSelector({
   const refine = REFINE_ENGINES.find((e) => e.id === refineEngine)
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
       <Field
         id="transcription-engine"
         icon={<Mic className="size-4" />}
@@ -72,7 +72,7 @@ function Field({ id, icon, label, value, disabled, onChange, options, hint, meta
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground transition-colors focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {options.map((option) => (
           <option key={option.id} value={option.id}>

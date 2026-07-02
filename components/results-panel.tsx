@@ -58,10 +58,13 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
   const tabText = useMemo(() => getTabText(result, tab), [result, tab])
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-border bg-card">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-7 items-center justify-center rounded-md bg-lane-note/15 text-lane-note">
+            <Sparkles className="size-4" />
+          </span>
           <h2 className="text-sm font-semibold text-card-foreground">노트</h2>
           <TypeSelector
             value={result.contentType}
@@ -75,7 +78,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
           <button
             type="button"
             onClick={() => downloadTextFile(buildMarkdown(result, baseName), `${baseName}.md`)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
           >
             <Download className="size-3.5" />
             Markdown
@@ -83,7 +86,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
           <button
             type="button"
             onClick={() => downloadTextFile(buildPlainText(result, baseName), `${baseName}.txt`)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
           >
             <Download className="size-3.5" />
             TXT
@@ -92,7 +95,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
+      <div className="scrollbar-subtle flex gap-1 overflow-x-auto border-b border-border px-2 py-2" role="tablist">
         {coreTabs.map(({ key, label, icon: Icon, disabled }) => (
           <TabButton
             key={key}
@@ -122,7 +125,7 @@ export function ResultsPanel({ result, fileName, onChangeType, changingType }: R
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="scrollbar-subtle flex-1 overflow-y-auto p-4 sm:p-5">
         <TabContent result={result} tab={tab} />
       </div>
     </div>
@@ -149,15 +152,15 @@ function TabButton({
       aria-disabled={disabled}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
         disabled
           ? "cursor-not-allowed text-muted-foreground/45"
           : active
-            ? "bg-secondary text-foreground"
-            : "text-muted-foreground hover:text-foreground"
+            ? "bg-secondary text-foreground shadow-sm"
+            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
       }`}
     >
-      <Icon className="size-3.5" />
+      <Icon className={`size-3.5 ${active && !disabled ? "text-brand" : ""}`} />
       {label}
     </button>
   )
@@ -215,11 +218,14 @@ function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
       return <p className="text-sm text-muted-foreground">타임라인 결과가 없습니다.</p>
     }
     return (
-      <ol className="space-y-3">
+      <ol className="space-y-2.5">
         {result.timeline.map((item, i) => (
-          <li key={`${item.start}-${item.end}-${i}`} className="rounded-md border border-border p-3">
+          <li
+            key={`${item.start}-${item.end}-${i}`}
+            className="rounded-lg border border-border border-l-2 border-l-lane-note/60 bg-background/40 p-3.5"
+          >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-sm bg-secondary px-1.5 py-0.5 text-xs font-medium tabular-nums text-foreground">
+              <span className="rounded-md bg-lane-note/12 px-1.5 py-0.5 font-mono text-xs font-medium tabular-nums text-lane-note">
                 {formatDuration(item.start)}-{formatDuration(item.end)}
               </span>
               <h3 className="text-sm font-semibold text-card-foreground">{item.title}</h3>
@@ -232,22 +238,24 @@ function TabContent({ result, tab }: { result: RefineResult; tab: TabKey }) {
   }
   if (tab === "transcript") {
     return (
-      <div className="space-y-3 text-sm leading-relaxed text-card-foreground">
-        {result.cleanedTranscript.split("\n\n").map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
+      <div className="rounded-lg border-l-2 border-l-lane-source/50 bg-background/40 py-1 pl-4 pr-1">
+        <div className="space-y-3 text-sm leading-relaxed text-card-foreground">
+          {result.cleanedTranscript.split("\n\n").map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+        </div>
       </div>
     )
   }
   if (tab === "summary") {
-    return <p className="text-sm leading-relaxed text-card-foreground">{result.summary}</p>
+    return <p className="max-w-prose text-[15px] leading-7 text-card-foreground">{result.summary}</p>
   }
   if (tab === "keyPoints") {
     return (
-      <ul className="space-y-2">
+      <ul className="space-y-2.5">
         {result.keyPoints.map((p, i) => (
-          <li key={i} className="flex gap-2 text-sm leading-relaxed text-card-foreground">
-            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+          <li key={i} className="flex gap-2.5 text-sm leading-relaxed text-card-foreground">
+            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
             <span>{p}</span>
           </li>
         ))}
