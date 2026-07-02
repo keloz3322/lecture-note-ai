@@ -85,7 +85,7 @@ function StepIcon({ status, index }: { status: StepStatus; index: number }) {
   }
   if (status === "active") {
     return (
-      <span className={`${base} bg-primary/15 text-primary`}>
+      <span className={`${base} bg-brand-muted text-brand ring-2 ring-brand/20`}>
         <Loader2 className="size-3.5 animate-spin" />
       </span>
     )

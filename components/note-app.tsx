@@ -1,7 +1,17 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { AlertTriangle, AudioLines, FileAudio, Languages, Play, RotateCcw, Sparkles } from "lucide-react"
+import {
+  AlertTriangle,
+  AudioLines,
+  FileAudio,
+  Languages,
+  Loader2,
+  Play,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
 import { DEMO_FILE_META, DEMO_FILE_NAME } from "@/lib/demo-result"
 import type { AudioFileMeta } from "@/lib/types"
@@ -90,26 +100,30 @@ export function NoteApp() {
 
   return (
     <div className="min-h-svh bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <AudioLines className="size-4.5" />
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground ring-1 ring-border/60">
+              <AudioLines className="size-5" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold leading-none text-foreground">Transcript Studio</h1>
+              <h1 className="text-sm font-semibold leading-none tracking-tight text-foreground">Transcript Studio</h1>
               <p className="mt-1 text-xs text-muted-foreground">음성 · 영상 · 실시간 번역을 학습 노트로 정리</p>
             </div>
           </div>
-          <span className="hidden items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground sm:inline-flex">
-            <Sparkles className="size-3" />
+          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground sm:inline-flex">
+            <Sparkles className="size-3 text-brand" />
             AI Gateway + Gemini Live
           </span>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6">
-        <div className="flex w-fit rounded-lg border border-border bg-card p-1" role="tablist" aria-label="작업 방식">
+      <main className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
+        <div
+          className="inline-flex w-full gap-1 rounded-xl border border-border bg-card p-1 sm:w-fit"
+          role="tablist"
+          aria-label="작업 방식"
+        >
           <ModeButton
             active={mode === "live"}
             icon={<Languages className="size-4" />}
@@ -128,7 +142,7 @@ export function NoteApp() {
           <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
             <aside className="flex flex-col gap-4">
               <section>
-                <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">파일</h2>
+                <SectionLabel className="mb-2">파일</SectionLabel>
                 <UploadPanel
                   file={file}
                   meta={meta}
@@ -145,7 +159,7 @@ export function NoteApp() {
               </section>
 
               <section>
-                <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">엔진</h2>
+                <SectionLabel className="mb-2">엔진</SectionLabel>
                 <EngineSelector
                   transcriptionEngine={transcriptionEngine}
                   refineEngine={refineEngine}
@@ -158,12 +172,12 @@ export function NoteApp() {
               {error && (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                  className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive"
                 >
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <div className="min-w-0">
                     <p className="font-medium">처리 오류</p>
-                    <p className="mt-0.5 text-destructive/90">{error}</p>
+                    <p className="mt-0.5 leading-relaxed text-destructive/90">{error}</p>
                   </div>
                 </div>
               )}
@@ -175,7 +189,7 @@ export function NoteApp() {
                       type="button"
                       onClick={startDemo}
                       disabled={state.isRunning}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Sparkles className="size-4" />
                       데모 보기
@@ -184,7 +198,7 @@ export function NoteApp() {
                       type="button"
                       onClick={start}
                       disabled={!file || !meta}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Play className="size-4" />
                       전사 시작
@@ -196,7 +210,7 @@ export function NoteApp() {
                       <button
                         type="button"
                         onClick={start}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground shadow-sm transition-opacity hover:opacity-90"
                       >
                         <RotateCcw className="size-4" />
                         다시 시도
@@ -206,7 +220,7 @@ export function NoteApp() {
                       type="button"
                       onClick={onClear}
                       disabled={state.isRunning}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       새 파일
                     </button>
@@ -215,13 +229,21 @@ export function NoteApp() {
               </div>
 
               {hasStarted && (
-                <section className="rounded-lg border border-border bg-card p-4">
-                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">진행 상태</h2>
-                  <ProgressSteps order={stepOrder} steps={state.steps} labels={progressLabels} details={progressDetails} />
+                <section className="rounded-xl border border-border bg-card p-4">
+                  <SectionLabel>진행 상태</SectionLabel>
+                  <div className="mt-3">
+                    <ProgressSteps
+                      order={stepOrder}
+                      steps={state.steps}
+                      labels={progressLabels}
+                      details={progressDetails}
+                    />
+                  </div>
                 </section>
               )}
 
-              <p className="text-xs leading-relaxed text-muted-foreground">
+              <p className="flex items-start gap-2 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 오디오 파일은 처리 후 저장되지 않습니다. API 키는 서버에서만 사용됩니다.
               </p>
             </aside>
@@ -264,13 +286,23 @@ function ModeButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors sm:flex-none ${
+        active
+          ? "bg-secondary text-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
       }`}
     >
-      {icon}
+      <span className={active ? "text-brand" : "text-muted-foreground"}>{icon}</span>
       {label}
     </button>
+  )
+}
+
+function SectionLabel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <h2 className={`text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ${className}`}>
+      {children}
+    </h2>
   )
 }
 
@@ -280,14 +312,18 @@ function statusEngineName(label: string) {
 
 function EmptyState({ running }: { running: boolean }) {
   return (
-    <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 p-8 text-center">
-      <div className="flex size-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-        <AudioLines className="size-6" />
+    <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-8 text-center">
+      <div
+        className={`flex size-14 items-center justify-center rounded-full ${
+          running ? "bg-brand-muted text-brand" : "bg-secondary text-muted-foreground"
+        }`}
+      >
+        {running ? <Loader2 className="size-6 animate-spin" /> : <AudioLines className="size-6" />}
       </div>
       <p className="mt-4 text-sm font-medium text-foreground">
         {running ? "노트를 생성하고 있습니다" : "아직 결과가 없습니다"}
       </p>
-      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+      <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
         {running
           ? "전사와 요약이 끝나면 여기에 정리된 노트가 표시됩니다."
           : "음성 · 영상 파일을 업로드하고 전사를 시작하면 정리된 노트가 여기에 표시됩니다."}

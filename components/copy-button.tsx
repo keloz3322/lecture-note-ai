@@ -25,9 +25,9 @@ export function CopyButton({ getText, label = "복사" }: CopyButtonProps) {
     <button
       type="button"
       onClick={onCopy}
-      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary"
     >
-      {copied ? <Check className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
+      {copied ? <Check className="size-3.5 text-lane-note" /> : <Copy className="size-3.5" />}
       {copied ? "복사됨" : label}
     </button>
   )
