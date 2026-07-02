@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react"
 import {
   AlertTriangle,
   AudioLines,
+  Clock3,
   FileAudio,
   FileText,
   Languages,
@@ -17,7 +18,8 @@ import {
   Wand2,
 } from "lucide-react"
 import { usePipeline } from "@/hooks/use-pipeline"
-import { DEMO_FILE_META, DEMO_FILE_NAME } from "@/lib/demo-result"
+import { DEFAULT_FILE_DEMO_ID, FILE_DEMO_PRESETS, getFileDemoPreset } from "@/lib/demo-result"
+import type { FileDemoPresetId, FileDemoPreset } from "@/lib/demo-result"
 import type { AudioFileMeta } from "@/lib/types"
 import {
   DEFAULT_REFINE_ENGINE,
@@ -25,6 +27,7 @@ import {
   getRefineEngine,
   getTranscriptionEngine,
 } from "@/lib/engines"
+import { formatBytes, formatDuration } from "@/lib/format"
 import { EngineSelector } from "./engine-selector"
 import { LiveTranslatePanel } from "./live-translate-panel"
 import { ProgressSteps } from "./progress-steps"
@@ -41,7 +44,9 @@ export function NoteApp() {
   const [validationError, setValidationError] = useState<string | null>(null)
   const [transcriptionEngine, setTranscriptionEngine] = useState(DEFAULT_TRANSCRIPTION_ENGINE)
   const [refineEngine, setRefineEngine] = useState(DEFAULT_REFINE_ENGINE)
+  const [selectedDemoId, setSelectedDemoId] = useState<FileDemoPresetId>(DEFAULT_FILE_DEMO_ID)
   const [isDemo, setIsDemo] = useState(false)
+  const selectedDemo = useMemo(() => getFileDemoPreset(selectedDemoId), [selectedDemoId])
 
   const progressLabels = useMemo(() => {
     const transcription = getTranscriptionEngine(transcriptionEngine)
@@ -61,13 +66,23 @@ export function NoteApp() {
       ? "완료되면 타임스탬프 기반 타임라인을 함께 만들 수 있습니다."
       : "이 엔진은 타임스탬프를 반환하지 않아 결과에서 타임라인을 비활성화합니다."
 
+    if (isDemo) {
+      const duration = formatDuration(selectedDemo.meta.durationSeconds)
+      return {
+        prepare: `${selectedDemo.label} 데모 샘플을 불러옵니다.${duration ? ` 원본 길이는 ${duration}입니다.` : ""}`,
+        upload: "발표용 데모라 실제 파일 업로드 없이 준비된 결과 데이터를 불러옵니다.",
+        transcribe: `${transcriptionName} 전사 과정을 압축해서 보여줍니다.${demoTimingText(selectedDemo, "transcribe")}`,
+        refine: `${refineName} 노트 생성 과정을 압축해서 보여줍니다.${demoTimingText(selectedDemo, "refine")}`,
+      }
+    }
+
     return {
       prepare: "파일 형식과 브라우저에서 읽을 수 있는 길이 정보를 확인합니다.",
       upload: "Vercel Blob에 임시 업로드한 뒤 서버에서 처리합니다. 오디오는 처리 후 삭제됩니다.",
       transcribe: `${transcriptionName} 전사는 스트리밍하지 않고 완료 후 한 번에 반환합니다. 큰 파일은 압축하거나 무음 구간 기준으로 나눕니다. ${timestampNote}`,
       refine: `${refineName}가 전사문을 정리하고 콘텐츠 유형별 노트 형식으로 재구성합니다.`,
     }
-  }, [transcriptionEngine, refineEngine])
+  }, [transcriptionEngine, refineEngine, isDemo, selectedDemo])
 
   const onSelect = useCallback((selected: File, m: AudioFileMeta) => {
     setValidationError(null)
@@ -94,10 +109,10 @@ export function NoteApp() {
   const startDemo = useCallback(() => {
     setValidationError(null)
     setIsDemo(true)
-    setFile(new File([""], `${DEMO_FILE_NAME}.ogg`, { type: DEMO_FILE_META.type }))
-    setMeta(DEMO_FILE_META)
-    runDemo({ transcriptionEngine, refineEngine })
-  }, [runDemo, transcriptionEngine, refineEngine])
+    setFile(new File([""], `${selectedDemo.fileName}.ogg`, { type: selectedDemo.meta.type }))
+    setMeta(selectedDemo.meta)
+    runDemo({ transcriptionEngine, refineEngine, demoId: selectedDemo.id })
+  }, [runDemo, selectedDemo, transcriptionEngine, refineEngine])
 
   const error = validationError ?? state.error
   const hasStarted = state.isRunning || state.result !== null || state.error !== null
@@ -164,6 +179,21 @@ export function NoteApp() {
                       setIsDemo(false)
                       setFile(null)
                       setMeta(null)
+                    }}
+                  />
+                  <DemoPresetPicker
+                    presets={FILE_DEMO_PRESETS}
+                    selectedId={selectedDemoId}
+                    disabled={state.isRunning}
+                    onSelect={(id) => {
+                      setSelectedDemoId(id)
+                      if (isDemo && !state.isRunning) {
+                        const preset = getFileDemoPreset(id)
+                        setFile(new File([""], `${preset.fileName}.ogg`, { type: preset.meta.type }))
+                        setMeta(preset.meta)
+                        reset()
+                        setIsDemo(false)
+                      }
                     }}
                   />
                 </div>
@@ -250,6 +280,7 @@ export function NoteApp() {
                       steps={state.steps}
                       labels={progressLabels}
                       details={progressDetails}
+                      showCompletedDetails={isDemo}
                     />
                   </div>
                 </section>
@@ -278,6 +309,64 @@ export function NoteApp() {
           <LiveTranslatePanel />
         )}
       </main>
+    </div>
+  )
+}
+
+function DemoPresetPicker({
+  presets,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  presets: FileDemoPreset[]
+  selectedId: FileDemoPresetId
+  disabled: boolean
+  onSelect: (id: FileDemoPresetId) => void
+}) {
+  const selected = getFileDemoPreset(selectedId)
+  const duration = formatDuration(selected.meta.durationSeconds)
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-foreground">데모 샘플</p>
+        {duration && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Clock3 className="size-3" />
+            {duration}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {presets.map((preset) => {
+          const active = preset.id === selectedId
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect(preset.id)}
+              className={`min-w-0 rounded-md border px-2 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                active
+                  ? "border-brand/50 bg-brand-muted text-brand"
+                  : "border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <span className="block truncate text-xs font-semibold">{preset.label}</span>
+              <span className="mt-0.5 block truncate text-[10px] opacity-80">{preset.badge}</span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="mt-2 rounded-lg border border-border bg-background px-2.5 py-2">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">{selected.description}</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {formatBytes(selected.meta.size)}
+          {selected.timings?.transcribeMs ? ` · 실제 전사 ${formatProcessingMs(selected.timings.transcribeMs)}` : ""}
+          {selected.timings?.refineMs ? ` · 실제 노트 ${formatProcessingMs(selected.timings.refineMs)}` : ""}
+        </p>
+      </div>
     </div>
   )
 }
@@ -327,7 +416,21 @@ function RailHeader({ step, title, description }: { step: string; title: string;
 }
 
 function statusEngineName(label: string) {
-  return label.replace(/^AI Gateway · /, "").replace(/^AI Gateway 쨌 /, "").replace(/^Groq · /, "Groq ")
+  return label.replace(/^AI Gateway · /, "").replace(/^Groq · /, "Groq ")
+}
+
+function demoTimingText(preset: FileDemoPreset, step: "transcribe" | "refine") {
+  const ms = step === "transcribe" ? preset.timings?.transcribeMs : preset.timings?.refineMs
+  return ms ? ` 실제 측정 시간은 약 ${formatProcessingMs(ms)}입니다.` : ""
+}
+
+function formatProcessingMs(ms: number) {
+  const seconds = Math.max(1, Math.round(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  if (minutes === 0) return `${rest}초`
+  if (rest === 0) return `${minutes}분`
+  return `${minutes}분 ${rest}초`
 }
 
 function FileEmptyState({ running, hasError }: { running: boolean; hasError: boolean }) {

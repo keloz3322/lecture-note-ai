@@ -28,6 +28,7 @@ export const maxDuration = 800
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 const AI_GATEWAY_TRANSCRIPTIONS_URL = "https://ai-gateway.vercel.sh/v4/ai/transcription-model"
 const AI_GATEWAY_PROTOCOL_VERSION = "0.0.1"
+const BLOB_DOWNLOAD_ATTEMPTS = 3
 
 /** Re-encode when within 1MB of the engine's hard limit. */
 function reencodeThresholdFor(engine: TranscriptionEngine) {
@@ -331,16 +332,32 @@ function normalizeGatewaySegments(value: unknown): TranscriptSegment[] | undefin
 }
 
 async function downloadPrivateBlob(pathname: string): Promise<{ buffer: Buffer; contentType: string }> {
-  const result = await get(pathname, { access: "private" })
-  if (!result || !result.stream) {
-    throw new Error("업로드된 오디오 파일을 찾을 수 없습니다.")
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= BLOB_DOWNLOAD_ATTEMPTS; attempt++) {
+    try {
+      const result = await get(pathname, { access: "private" })
+      if (!result || !result.stream) {
+        throw new Error("업로드된 오디오 파일을 찾을 수 없습니다.")
+      }
+
+      const arrayBuffer = await new Response(result.stream).arrayBuffer()
+      return {
+        buffer: Buffer.from(arrayBuffer),
+        contentType: result.blob.contentType || "audio/ogg",
+      }
+    } catch (error) {
+      lastError = error
+      if (attempt < BLOB_DOWNLOAD_ATTEMPTS) await wait(700 * attempt)
+    }
   }
 
-  const arrayBuffer = await new Response(result.stream).arrayBuffer()
-  return {
-    buffer: Buffer.from(arrayBuffer),
-    contentType: result.blob.contentType || "audio/ogg",
-  }
+  const detail = lastError instanceof Error && lastError.message ? ` (${lastError.message})` : ""
+  throw new Error(`업로드된 오디오 파일을 Blob에서 내려받지 못했습니다. 잠시 후 다시 시도해 주세요.${detail}`)
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**

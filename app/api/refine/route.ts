@@ -57,6 +57,9 @@ const FALLBACK_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "ge
 const GATEWAY_GEMINI_TEMPERATURE = 1
 const DEFAULT_GATEWAY_TEMPERATURE = 0.1
 const GEMINI_SHORT_TRANSCRIPT_RETRY_LIMIT = 1
+const COMPACT_REFINE_CHAR_THRESHOLD = 40_000
+const COMPACT_REFINE_SEGMENT_THRESHOLD = 800
+const COMPACT_REFINE_PROMPT_BUDGET = 28_000
 
 const CONTENT_TYPE_IDS = CONTENT_TYPES.map((type) => type.id)
 
@@ -209,8 +212,9 @@ function isGeminiRefineEngine(engine: RefineEngine) {
 
 function geminiCleanedTranscriptRetryReason(
   result: RefineResult,
-  input: Pick<RefineInput, "rawTranscript">,
+  input: Pick<RefineInput, "rawTranscript" | "segments">,
 ): "short" | "long" | undefined {
+  if (usesCompactRefineInput(input)) return undefined
   const length = result.cleanedTranscript.length
   if (length < minimumCleanedTranscriptChars(input.rawTranscript)) return "short"
   if (length > maximumCleanedTranscriptChars(input.rawTranscript)) return "long"
@@ -364,7 +368,10 @@ function buildPrompt({
   transcriptionEngineLabel?: string
   overrideType?: ContentTypeId
 }, options: { preserveFullTranscript?: boolean; cleanedTranscriptRetry?: "short" | "long" } = {}) {
-  const timedTranscript = buildTimedTranscript(segments, rawTranscript)
+  const compactRefineInput = usesCompactRefineInput({ rawTranscript, segments })
+  const timedTranscript = compactRefineInput
+    ? buildCompactTimedTranscript(segments, rawTranscript)
+    : buildTimedTranscript(segments, rawTranscript)
   const hasTimestamps = (timestampStatus === "available" || timestampStatus === "estimated") && !!segments?.length
   const wordTimestamps = buildWordTimestamps(words)
   const wordSection = wordTimestamps
@@ -401,7 +408,14 @@ function buildPrompt({
   const sectionInstruction = sectionSpecs
     .map((spec) => `  - id "${spec.id}" (${spec.title}): ${spec.instruction}`)
     .join("\n")
-  const transcriptPreservationRule = options.preserveFullTranscript
+  const compactRule = compactRefineInput
+    ? `\n긴 전사본 처리 기준:
+- 아래 입력은 전체 전사본이 아니라 시간대별 대표 구간 발췌입니다.
+- detectedType, summary, keyPoints, timeline, sections는 제공된 대표 구간과 시간 흐름을 근거로 작성하세요.
+- cleanedTranscript는 간결한 교정 샘플만 반환해도 됩니다. 서버는 전체 원문 전사본을 별도로 보존해 결과의 정리된 전사문에 사용합니다.
+- 특정 담당자, 결정 사항, 기한, 투표, 액션 아이템이 보이면 meeting 유형 신호로 강하게 반영하세요.`
+    : ""
+  const transcriptPreservationRule = options.preserveFullTranscript && !compactRefineInput
     ? `\nGemini 전용 cleanedTranscript 품질 기준:
 - cleanedTranscript는 summary가 아니라 "전체 전사문을 읽기 좋게 교정한 풀 버전"입니다.
 - 원문에 나온 모델명, 도구명, 서비스명, 가격, 비교 기준, 장단점, 추천 결론을 빠뜨리지 마세요.
@@ -434,7 +448,7 @@ JSON 키는 detectedType, cleanedTranscript, summary, timeline, keyPoints, secti
 ${timestampRule}
 - summary는 4~7문장, keyPoints는 5~9개로 작성하세요.
 - sections 배열에는 아래에 명시된 id의 항목만 포함하세요. 각 항목은 { "id": ..., "items": [...] } 형식입니다. 해당 내용이 없으면 items를 빈 배열로 두세요.
-${sectionInstruction}${transcriptPreservationRule}${retryRule}${durationHint}
+${sectionInstruction}${compactRule}${transcriptPreservationRule}${retryRule}${durationHint}
 
 ${transcriptHeading}:
 ${timedTranscript}${wordSection}`
@@ -591,10 +605,9 @@ function normalizeRefineResult(
     detectedType,
     timestampStatus,
     timelineNotice: timelineNotice(timestampStatus, input.transcriptionEngineLabel),
-    cleanedTranscript:
-      getText(record.cleanedTranscript) ||
-      getText(record.cleaned_transcript) ||
-      input.rawTranscript,
+    cleanedTranscript: usesCompactRefineInput(input)
+      ? normalizeLongTranscriptForDisplay(input.rawTranscript)
+      : getText(record.cleanedTranscript) || getText(record.cleaned_transcript) || input.rawTranscript,
     summary: getText(record.summary) || "요약을 생성하지 못했습니다.",
     timeline,
     keyPoints: toStringArray(record.keyPoints || record.key_points),
@@ -740,6 +753,65 @@ function buildTimedTranscript(segments: TranscriptSegment[] | undefined, rawTran
   return segments
     .map((segment) => `[${formatTimestamp(segment.start)}-${formatTimestamp(segment.end)}] ${segment.text.trim()}`)
     .join("\n")
+}
+
+function usesCompactRefineInput(input: Pick<RefineInput, "rawTranscript" | "segments">) {
+  return (
+    input.rawTranscript.trim().length > COMPACT_REFINE_CHAR_THRESHOLD ||
+    (input.segments?.length ?? 0) > COMPACT_REFINE_SEGMENT_THRESHOLD
+  )
+}
+
+function buildCompactTimedTranscript(segments: TranscriptSegment[] | undefined, rawTranscript: string) {
+  if (!segments?.length) return compactPlainTranscript(rawTranscript)
+
+  const bucketCount = Math.min(32, Math.max(8, Math.ceil(segments.length / 90)))
+  const charsPerBucket = Math.max(420, Math.floor(COMPACT_REFINE_PROMPT_BUDGET / bucketCount))
+  const bucketSize = Math.ceil(segments.length / bucketCount)
+  const lines: string[] = []
+
+  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++) {
+    const bucket = segments.slice(bucketIndex * bucketSize, (bucketIndex + 1) * bucketSize)
+    if (!bucket.length) continue
+    const first = bucket[0]
+    const last = bucket[bucket.length - 1]
+    lines.push(`\n[대표 구간 ${bucketIndex + 1}: ${formatTimestamp(first.start)}-${formatTimestamp(last.end)}]`)
+
+    let used = 0
+    const targetLines = Math.max(4, Math.floor(charsPerBucket / 120))
+    const stride = Math.max(1, Math.floor(bucket.length / targetLines))
+    for (let i = 0; i < bucket.length && used < charsPerBucket; i += stride) {
+      const segment = bucket[i]
+      const text = segment.text.trim()
+      if (!text) continue
+      const line = `[${formatTimestamp(segment.start)}-${formatTimestamp(segment.end)}] ${text}`
+      used += line.length
+      lines.push(line)
+    }
+  }
+
+  return lines.join("\n").trim()
+}
+
+function compactPlainTranscript(rawTranscript: string) {
+  const text = rawTranscript.trim()
+  if (text.length <= COMPACT_REFINE_PROMPT_BUDGET) return text
+  const chunkCount = 24
+  const charsPerChunk = Math.floor(COMPACT_REFINE_PROMPT_BUDGET / chunkCount)
+  const lines: string[] = []
+  for (let i = 0; i < chunkCount; i++) {
+    const start = Math.floor((text.length * i) / chunkCount)
+    const excerpt = text.slice(start, start + charsPerChunk).trim()
+    if (excerpt) lines.push(`[대표 발췌 ${i + 1}]\n${excerpt}`)
+  }
+  return lines.join("\n\n")
+}
+
+function normalizeLongTranscriptForDisplay(rawTranscript: string) {
+  return rawTranscript
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 function buildWordTimestamps(words: TranscriptWord[] | undefined) {

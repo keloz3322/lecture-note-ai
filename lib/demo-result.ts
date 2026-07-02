@@ -1,7 +1,10 @@
 import kurzweilDemoResult from "@/lib/kurzweil-demo-result.json"
+import interviewDemoResult from "@/lib/interview-demo-result.json"
+import meetingDemoResult from "@/lib/meeting-demo-result.json"
 import type { AudioFileMeta, RefineResult, TimestampStatus } from "@/lib/types"
 
 export const DEMO_FILE_NAME = "Ray Kurzweil - MIT 2025 Robert A. Muh Award Lecture"
+export type FileDemoPresetId = "lecture" | "interview" | "meeting"
 
 export const DEMO_FILE_META: AudioFileMeta = {
   name: DEMO_FILE_NAME,
@@ -11,23 +14,88 @@ export const DEMO_FILE_META: AudioFileMeta = {
 }
 
 const KURZWEIL_DEMO_RESULT = kurzweilDemoResult as RefineResult
+const INTERVIEW_DEMO_RESULT = interviewDemoResult as RefineResult
+const MEETING_DEMO_RESULT = meetingDemoResult as RefineResult
 
-const DEMO_RESULTS_BY_REFINE_ENGINE: Record<string, RefineResult> = {
-  "gateway-gpt": KURZWEIL_DEMO_RESULT,
-  "gateway-gemini": KURZWEIL_DEMO_RESULT,
-  gemini: KURZWEIL_DEMO_RESULT,
+export interface FileDemoPreset {
+  id: FileDemoPresetId
+  label: string
+  badge: string
+  description: string
+  fileName: string
+  meta: AudioFileMeta
+  result: RefineResult
+  timings?: {
+    transcribeMs?: number
+    refineMs?: number
+  }
+}
+
+export const FILE_DEMO_PRESETS: FileDemoPreset[] = [
+  {
+    id: "lecture",
+    label: "강의",
+    badge: "강의 / 수업",
+    description: "1시간 MIT 강연을 학습 노트와 복습 질문으로 정리합니다.",
+    fileName: DEMO_FILE_NAME,
+    meta: DEMO_FILE_META,
+    result: KURZWEIL_DEMO_RESULT,
+  },
+  {
+    id: "interview",
+    label: "인터뷰",
+    badge: "인터뷰",
+    description: "Demis Hassabis 인터뷰를 핵심 인용과 후속 질문 중심으로 정리합니다.",
+    fileName: "03-original-interview-demis-hassabis-2025-full",
+    meta: {
+      name: "03-original-interview-demis-hassabis-2025-full",
+      size: 5_219_577,
+      type: "audio/ogg",
+      durationSeconds: 847,
+    },
+    result: INTERVIEW_DEMO_RESULT,
+    timings: {
+      transcribeMs: 44_647,
+      refineMs: 330_757,
+    },
+  },
+  {
+    id: "meeting",
+    label: "회의",
+    badge: "회의",
+    description: "CARB 공개 회의 2시간 49분 녹음을 결정 사항과 액션 아이템으로 정리합니다.",
+    fileName: "02-meeting-california-air-resources-board-2026-06-25-full",
+    meta: {
+      name: "02-meeting-california-air-resources-board-2026-06-25-full",
+      size: 59_718_019,
+      type: "audio/ogg",
+      durationSeconds: 10_138,
+    },
+    result: MEETING_DEMO_RESULT,
+    timings: {
+      transcribeMs: 569_000,
+      refineMs: 27_579,
+    },
+  },
+]
+
+export const DEFAULT_FILE_DEMO_ID: FileDemoPresetId = "lecture"
+
+export function getFileDemoPreset(id: string | undefined | null): FileDemoPreset {
+  return FILE_DEMO_PRESETS.find((preset) => preset.id === id) ?? FILE_DEMO_PRESETS[0]
 }
 
 export function getDemoResult({
   timestampStatus = "available",
   transcriptionEngineLabel,
-  refineEngine,
+  demoId,
 }: {
   timestampStatus?: TimestampStatus
   transcriptionEngineLabel?: string
   refineEngine?: string
+  demoId?: string
 } = {}): RefineResult {
-  const base = DEMO_RESULTS_BY_REFINE_ENGINE[refineEngine ?? ""] ?? KURZWEIL_DEMO_RESULT
+  const base = getFileDemoPreset(demoId).result
 
   if (timestampStatus === "available") {
     return { ...base, timestampStatus, timelineNotice: undefined }
